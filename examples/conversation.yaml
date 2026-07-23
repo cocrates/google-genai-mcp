@@ -1,0 +1,30 @@
+type: speech
+model: gemini-3.1-flash-tts-preview
+
+params:
+  text: |
+    # SPEECH SYNTHESIS
+    Synthesize a casual phone conversation between two Korean female friends in their early 20s.
+    Speak only the text under TRANSCRIPT.
+
+    ### DIRECTOR'S NOTES
+    Style: Natural Korean phone call. Sua is excited and bragging, her friend is genuinely envious and a bit whiny. Light, playful, youthful energy.
+    Pace: Fast and bouncy — like real friends chattering on the phone.
+    Accent: Standard Korean, casual informal speech (반말).
+
+    #### TRANSCRIPT
+    수아: 야~ 나 여름 방학에 유럽 간다! 파리랑 이탈리아 돌 건데 진짜 개이득이야!
+    친구: 뭐?! 진짜?! 나도 가고 싶은데ㅠㅠ 부러워 죽겠어 진짜
+    수아: 아~ 에펠탑 야경 찍으면서 와인 한 잔 하면 말도 안 되거든? 거기 크루아상 진짜 미쳤어
+    친구: 제발 나도 데려가 줘... 나는 올여름 알바만 하고 있는데ㅠㅠ
+    수아: 흐흐흐~ 내가 맛있는 거 사진 많이 찍어줄게!
+    친구: 아 완전 기대할게!! 근데 진짜 부러워 죽는 줄 알았어ㅠㅠ
+
+  speakers:
+    - name: 수아
+      voice: Laomedeia
+    - name: 친구
+      voice: Callirrhoe
+  outputFormat: wav
+
+output: "./output/conversation.wav"

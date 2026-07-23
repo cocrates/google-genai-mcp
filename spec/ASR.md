@@ -1,0 +1,336 @@
+# Architecturally Significant Requirements
+
+Living registry for google-genai-mcp. Status of each ASR must stay current.
+
+## Summary
+
+| ID | Title | Category | Status | Related ADRs | Spec |
+|----|-------|----------|--------|--------------|------|
+| ASR-001 | MCP 전송 방식 | Integration & dependencies | approved | adr/mcp-transport.md | spec/google-genai-mcp.md — Decisions |
+| ASR-002 | CLI 구조 및 인터랙티브 모드 | Deliverable form | approved | adr/cli-mcp-entry-point.md | spec/google-genai-mcp.md — Decisions, Requirements |
+| ASR-003 | 패키징 구조 | Structure & organization | approved | — | spec/google-genai-mcp.md — Constraints |
+| ASR-004 | MVP 기능 범위 | Scope boundary | approved | — | spec/google-genai-mcp.md — Decisions, Out of Scope |
+| ASR-005 | Gemini API 클라이언트 통합 방식 | Integration & dependencies | approved | adr/gemini-client-lifecycle.md | spec/google-genai-mcp.md — Decisions |
+| ASR-006 | 바이너리 출력 처리 | Structure & organization | approved | — | spec/google-genai-mcp.md — Decisions |
+| ASR-007 | 오류 처리 및 복구 전략 | Quality bar | approved | — | spec/google-genai-mcp.md — Decisions |
+| ASR-008 | 로깅 및 관찰 가능성 | Quality bar | approved | — | spec/google-genai-mcp.md — Decisions |
+| ASR-009 | 테스트 전략 | Quality bar | approved | — | spec/google-genai-mcp.md — Constraints |
+| ASR-010 | Node.js 버전 호환성 및 의존성 관리 | Constraints | approved | — | spec/google-genai-mcp.md — Constraints |
+| ASR-011 | 비디오 생성 시간 초과 처리 | Structure & organization | approved | — | spec/google-genai-mcp.md — Decisions |
+| ASR-012 | TypeScript 타입 안전성 및 공개 API 경계 | Quality bar | approved | — | spec/google-genai-mcp.md — Decisions |
+| ASR-013 | 파일 기반 입력 지원 | Deliverable form | approved | — | spec/google-genai-mcp.md — Requirements, 경로 해석 |
+| ASR-019 | Interaction 메타데이터 관리 | Structure & organization | approved | — | spec/google-genai-mcp.md — Interaction 관리 |
+| ASR-020 | 인터랙티브 세션 관리 | Deliverable form | approved | — | spec/google-genai-mcp.md — Requirements, Interaction 관리 |
+| ASR-021 | Multi-turn 편집 | Structure & organization | approved | — | spec/google-genai-mcp.md — Requirements, Interaction 관리 |
+| ASR-014 | API 이중 체계 관리 | Integration & dependencies | approved | — | spec/google-genai-mcp.md — Decisions |
+| ASR-015 | 산출물 보관 전략 | Structure & organization | approved | — | spec/google-genai-mcp.md — Decisions |
+| ASR-016 | 출력 파일 위치 관리 | Deliverable form | approved | — | spec/google-genai-mcp.md — Decisions, Requirements |
+| ASR-017 | 백그라운드 실행 모드 | Structure & organization | approved | — | spec/google-genai-mcp.md — Decisions |
+| ASR-018 | Audio(TTS) 생성 지원 | Scope boundary | approved | — | spec/google-genai-mcp.md — Audio 스키마, Requirements |
+
+## Dependency Order (recommended review path)
+
+1. ASR-001 (MCP 전송 방식)
+2. ASR-002 (CLI 구조 및 인터랙티브 모드)
+3. ASR-003 (패키징 구조)
+4. ASR-004 (MVP 기능 범위)
+5. ASR-005 (Gemini API 클라이언트 통합 방식)
+6. ASR-006 (바이너리 출력 처리)
+7. ASR-017 (백그라운드 실행 모드)
+8. ASR-011 (비디오 생성 시간 초과 처리)
+9. ASR-013 (파일 기반 입력 지원)
+10. ASR-014 (API 이중 체계 관리)
+11. ASR-015 (산출물 보관 전략)
+12. ASR-016 (출력 파일 위치 관리)
+13. ASR-019 (Interaction 메타데이터 관리)
+14. ASR-020 (인터랙티브 세션 관리)
+15. ASR-021 (Multi-turn 편집)
+16. ASR-007 (오류 처리 및 복구 전략)
+17. ASR-012 (TypeScript 타입 안전성 및 공개 API 경계)
+18. ASR-008 (로깅 및 관찰 가능성)
+19. ASR-010 (Node.js 버전 호환성 및 의존성 관리)
+20. ASR-009 (테스트 전략)
+21. ASR-018 (Audio(TTS) 생성 지원)
+
+## ASR Detail
+
+### ASR-001 — MCP 전송 방식
+
+- **Category:** Integration & dependencies
+- **Status:** approved
+- **Statement:** MCP 서버의 전송 방식을 stdio, HTTP(SSE), 또는 둘 다 지원으로 결정해야 한다
+- **Why it matters:** 전송 방식이 에이전트 호환성, 배포 모델, 사용자 접근 방식에 직접 영향
+- **Depends on:** 없음
+- **Related ADRs:**
+  - `adr/mcp-transport.md` — approved — MCP 전송 방식 비교 분석
+- **Resolution path:** adr
+- **Resolution:** Option A 채택 — stdio 전용. 로컬 프로세스로 실행하여 stdin/stdout으로 JSON-RPC 통신.
+- **Spec:** —
+- **Notes:** 사용자가 stdio vs HTTP 차이를 분석 요청
+
+### ASR-002 — CLI 구조 및 인터랙티브 모드
+
+- **Category:** Deliverable form
+- **Status:** approved
+- **Statement:** CLI 인터페이스의 명령어 구조와 인터랙티브 모드 설계를 결정
+- **Why it matters:** CLI가 사용자와 가장 먼저 마주하는 진입점. 명령어 구조가 사용자 경험과 확장성에 직접 영향
+- **Depends on:** ASR-001
+- **Related ADRs:**
+  - `adr/cli-mcp-entry-point.md` — approved — CLI/MCP Entry Point 구조 (Multi-Bin 채택)
+- **Resolution path:** direct-input
+- **Resolution:** 파일 기반 단일 명령어 + 인터랙티브 모드. `gemini <files...>`로 YAML 파일 기반 생성, `gemini`로 인터랙티브 세션 시작. 서브커맨드(`image`, `video`, `audio`) 제거 — YAML 파일의 `type` 필드로 분기. 멀티 파일 glob 지원 (`gemini aa/*.yaml bb/*.yaml`).
+- **Spec:** `spec/google-genai-mcp.md` — Decisions, Requirements
+- **Notes:**
+  - MCP: `generate`(단일 파일, 응답 ID+files) / `download` / interaction 관리 도구
+  - MCP: `sync_interactions` / `cancel_interaction` / `delete_interaction`
+  - GUI/Web UI 확장 고려 — core/ 모듈이 비즈니스 로직 담당, CLI는 UI 계층만 담당
+
+### ASR-003 — 패키징 구조
+
+- **Category:** Structure & organization
+- **Status:** approved
+- **Statement:** 프로젝트를 단일 패키지로 배포할지, monorepo로 분리할지 결정
+- **Why it matters:** 개발 복잡도, 배포 용이성, 유지보수에 영향
+- **Depends on:** ASR-002
+- **Related ADRs:** 없음 (Direct Input)
+- **Resolution path:** direct-input
+- **Resolution:** 단일 패키지 `google-genai-mcp`로 배포.
+- **Spec:** —
+- **Notes:** 사용자가 단일 패키지 선택
+
+### ASR-004 — MVP 기능 범위
+
+- **Category:** Scope boundary
+- **Status:** approved
+- **Statement:** MVP에 포함할 Gemini API 기능 결정
+- **Why it matters:** 개발 범위와 출시 일정에 직접 영향
+- **Depends on:** ASR-001
+- **Related ADRs:** 없음 (Direct Input)
+- **Resolution path:** direct-input
+- **Resolution:** MVP 기능: Image 생성, Video 생성. 텍스트 생성, 코드 생성, 임베딩은 제외.
+- **Spec:** —
+- **Notes:** 사용자가 image, video 생성을 MVP로 선택
+
+### ASR-005 — Gemini API 클라이언트 통합 방식
+
+- **Category:** Integration & dependencies
+- **Status:** approved
+- **Statement:** Google Gemini API 클라이언트 SDK(`@google/genai`)의 인스턴스 생성, 생명주기 관리, 재사용 방식을 결정해야 한다
+- **Why it matters:** 클라이언트 인스턴스 관리 방식이 연결 풀링, 메모리 사용, 에이전트 재시작 시 상태 복구에 영향. 잘못된 설계 시 리소스 누수 또는 불필요한 재연결 발생
+- **Depends on:** ASR-001, ASR-004
+- **Related ADRs:**
+  - `adr/gemini-client-lifecycle.md` — approved — 클라이언트 생명주기 관리 (싱글톤 vs 요청별)
+- **Resolution path:** adr
+- **Resolution:** Option A 채택 — 싱글톤. 애플리케이션 시작 시 1회 생성, 전역 공유. stdio 환경에서는 프로세스 격리로 동시성 문제 없음. HTTP/SSE 확장 시 연결 풀/워커 모델 추가 검토. 인증은 `GEMINI_API_KEY`만 사용 (`GOOGLE_API_KEY` 미사용).
+- **Spec:** —
+- **Notes:** `@google/genai` SDK는 경량 객체 (네트워크 연결 없이 초기화). stdio 프로세스 격리로 여러 에이전트 동시 접근 시에도 충돌 없음. HTTP/SSE 확장 시 재검토 필요
+
+### ASR-006 — 바이너리 출력 처리
+
+- **Category:** Structure & organization
+- **Status:** approved
+- **Statement:** 이미지/비디오 생성 결과의 바이너리 데이터를 MCP/CLI에 어떻게 전달할지 결정
+- **Why it matters:** MCP 프레임 크기 제한, CLI 출력 스트림 제한, 대용량 파일 처리 능력에 직접 영향
+- **Depends on:** ASR-004
+- **Related ADRs:** —
+- **Resolution path:** direct-input
+- **Resolution:** 로컬 파일 저장. `generate` 응답 `{ interactionId, files, background }` (동기: files 채움, 비동기: files=[]). MCP는 단일 filePath. `download` 오류는 즉시 실패. `filePath` 미지정 시 YAML `output` → 자동 파일명.
+- **Spec:** `spec/google-genai-mcp.md` — Decisions, Requirements
+- **Notes:** 2026-07-23 ID+files, download 즉시 에러, MCP 단일 파일
+
+### ASR-007 — 오류 처리 및 복구 전략
+
+- **Category:** Quality bar
+- **Status:** approved
+- **Statement:** Gemini API 오류(인증 실패, rate limit, quota 초과, 서비스 불가), MCP 프로토콜 오류, CLI 입력 오류를 어떻게 처리하고 사용자에게 전달할지 결정
+- **Why it matters:** 오류 처리가 일관되지 않으면 에이전트가 잘못된 결과를 해석하거나, 사용자가 원인을 파악하기 어려워짐. 재시도 가능 여부도 아키텍처에 영향
+- **Depends on:** ASR-005
+- **Related ADRs:** —
+- **Resolution path:** direct-input
+- **Resolution:** 유형별 처리: 입력 오류(즉시 실패), 인증 오류(즉시 실패), rate limit(지수 백오프 최대 3회), 서비스 오류(지수 백오프 최대 2회), quota 초과(즉시 실패). MCP는 tool error 응답, CLI는 stderr + exit code (0:성공, 1:일반, 2:입력, 3:인증, 4:API). 재시도는 rate limit과 일시적 서비스 오류만.
+- **Spec:** —
+- **Notes:** —
+
+### ASR-008 — 로깅 및 관찰 가능성
+
+- **Category:** Quality bar
+- **Status:** approved
+- **Statement:** stdio 전송 환경에서 로그 출력 방식, 로그 레벨, 디버깅 지원 수준을 결정해야 한다
+- **Why it matters:** MCP stdio 환경에서 stdout은 JSON-RPC 전용 — 로그가 stdout으로 출력되면 프로토콜이 깨짐. stderr 또는 파일 로깅이 필수
+- **Depends on:** ASR-001
+- **Related ADRs:** —
+- **Resolution path:** direct-input
+- **Resolution:** 데이터 루트는 사용자 홈 기준 OS별 `dataDir`(Linux XDG / macOS Application Support / Windows LocalAppData). 로그 `{dataDir}/logs`, config `{dataDir}/config.json` MVP는 `logLevel`만. 기본 quiet, `--verbose`/`LOG_LEVEL=debug`.
+- **Spec:** `spec/google-genai-mcp.md` — 데이터 디렉터리, config.json
+- **Notes:** 2026-07-23 크로스플랫폼 홈 기준 dataDir
+
+### ASR-009 — 테스트 전략
+
+- **Category:** Quality bar
+- **Status:** approved
+- **Statement:** 단위 테스트, 통합 테스트, MCP 프로토콜 호환성 테스트의 범위와 커버리지 목표를 결정
+- **Why it matters:** 테스트 전략이 CI/CD 파이프라인, 릴리스 품질, 기여자 온보딩에 영향
+- **Depends on:** 없음 (독립적)
+- **Related ADRs:** —
+- **Resolution path:** direct-input
+- **Resolution:** 단위 테스트 (Gemini API mocking, 유틸리티), 통합 테스트 (MCP 서버 → tool call → 응답). 커버리지 목표: 90%+. 테스트 프레임워크: vitest. MCP 테스트는 `@modelcontextprotocol/sdk` 유틸리티 활용.
+- **Spec:** —
+- **Notes:** —
+
+### ASR-010 — Node.js 버전 호환성 및 의존성 관리
+
+- **Category:** Constraints
+- **Status:** approved
+- **Statement:** 최소 지원 Node.js 버전, npm 의존성 수, 바이너리 의존성 배제 여부를 결정
+- **Why it matters:** Node.js 버전이 npm 배포 범위를 결정. 의존성이 많을수록 보안 노출과 설치 시간 증가
+- **Depends on:** ASR-003
+- **Related ADRs:** —
+- **Resolution path:** direct-input
+- **Resolution:** Node.js 18+ LTS. `engines` 필드 명시. 필수 의존성만 사용 (`@modelcontextprotocol/sdk`, `@google/genai`). 바이너리 의존성 배제.
+- **Spec:** —
+- **Notes:** —
+
+### ASR-011 — 비디오 생성 시간 초과 처리
+
+- **Category:** Structure & organization
+- **Status:** approved
+- **Statement:** Veo API 비디오 생성은 수분 이상 소요될 수 있으므로, MCP tool call timeout과 CLI 사용자 대기 경험을 어떻게 설계할지 결정
+- **Why it matters:** MCP 클라이언트별 default timeout이 다름 (일부는 60초). 비디오 생성이 이를 초과하면 연결이 끊길 수 있음
+- **Depends on:** ASR-005, ASR-006
+- **Related ADRs:** —
+- **Resolution path:** direct-input
+- **Resolution:** Video 기본 `background=true`로 MCP timeout 회피. `generate`는 ID(+files) 즉시 반환, 완료 후 `download`. CLI 동기 대기: progress(poll 10초), **최대 대기 없음**, Ctrl-C로 중단.
+- **Spec:** `spec/google-genai-mcp.md` — Decisions
+- **Notes:** 2026-07-23 10분 상한 제거
+
+### ASR-012 — TypeScript 타입 안전성 및 공개 API 경계
+
+- **Category:** Quality bar
+- **Status:** approved
+- **Statement:** MCP SDK 타입, Gemini SDK 타입, 프로젝트 자체 타입 간의 경계와 외부에 노출되는 인터페이스를 결정
+- **Why it matters:** 타입 경계가 명확하지 않으면 Gemini API 응답 구조 변경 시 MCP tool schema까지 영향. 유지보수 비용 증가
+- **Depends on:** ASR-005
+- **Related ADRs:** —
+- **Resolution path:** direct-input
+- **Resolution:** 외부 노출은 MCP tool input/output schema만. Gemini SDK 응답은 내부 변환 레이어를 통해 MCP 타입으로 변환. Gemini API 응답 변경 시 MCP schema 영향 최소화.
+- **Spec:** —
+- **Notes:** —
+
+### ASR-013 — 파일 기반 입력 지원
+
+- **Category:** Deliverable form
+- **Status:** approved
+- **Statement:** CLI와 MCP 모두에서 생성 파라미터를 YAML/JSON 파일로 입력받는 방식을 결정
+- **Why it matters:** Image/Video/Audio 생성 파라미터는 많고, 프롬프트는 길고 복잡할 수 있음. 파일 기반 입력이 없으면 CLI에서는 에스케이프 문제, MCP에서는 JSON-RPC 메시지 크기 제한에 직면
+- **Depends on:** ASR-002, ASR-004
+- **Related ADRs:** —
+- **Resolution path:** direct-input
+- **Resolution:** CLI는 파일 기반(멀티·glob). MCP `generate`는 **단일 filePath**만 — 다건은 클라이언트 다중/병렬 호출. 응답 `{interactionId,files,background}`. 상대 경로=요청 파일 디렉터리. 자동 파일명 위치는 ASR-016.
+- **Spec:** `spec/google-genai-mcp.md` — Requirements, 경로 해석, Interaction 관리
+- **Notes:** 인터랙티브 모드에서 대화 이어가기는 Interactions API `previous_interaction_id`로 처리 — 원본 파라미터 재전송 불필요
+
+### ASR-014 — API 이중 체계 관리
+
+- **Category:** Integration & dependencies
+- **Status:** approved
+- **Statement:** Interactions API를 기본으로 사용하되, Batch API가 필요한 경우 generateContent로 분기하는 구조를 결정
+- **Why it matters:** 두 API의 초기화, 호출 방식, 결과 처리가 다름. 명확한 분기 기준이 없으면 코드 복잡도 증가
+- **Depends on:** ASR-005
+- **Related ADRs:** —
+- **Resolution path:** direct-input
+- **Resolution:** 기본 Interactions API 사용 (단일 생성). Batch 모드일 때만 generateContent + Batch API 사용. MVP에서는 Batch API 미지원, 향후 확장.
+- **Spec:** —
+- **Notes:** —
+
+### ASR-015 — 산출물 보관 전략
+
+- **Category:** Structure & organization
+- **Status:** approved
+- **Statement:** 서버 보관(55일)과 로컬 저장의 관계를 결정
+- **Why it matters:** 서버 보관만으로 충분할지, 로컬 백업이 필요한지 결정 필요. 보관 기간 만료 시 데이터 손실 리스크
+- **Depends on:** ASR-006
+- **Related ADRs:** —
+- **Resolution path:** direct-input
+- **Resolution:** 동기(`background=false`)는 `generate` 완료 시 로컬 자동 저장. 비동기는 `download` 호출 시 저장. 서버 보관은 Gemini API 기본 동작 (55일) 유지. 추가 장기 보관은 MVP 미포함.
+- **Spec:** `spec/google-genai-mcp.md` — Decisions
+- **Notes:** —
+
+### ASR-016 — 출력 파일 위치 관리
+
+- **Category:** Deliverable form
+- **Status:** approved
+- **Statement:** 생성된 파일의 기본 저장 위치와 사용자 지정 방식을 결정
+- **Why it matters:** 사용자 기대치와 CLI/MCP 일관성에 영향. 기본값 잘못 선택 시 사용자 불편
+- **Depends on:** ASR-002, ASR-006
+- **Related ADRs:** —
+- **Resolution path:** direct-input
+- **Resolution:** 경로 우선순위 — `download`의 `filePath` > YAML `output` > 자동 파일명. YAML 명시 상대 경로는 요청 파일 디렉터리 기준. **자동 파일명 위치: CLI=CWD, MCP=workspace(`process.cwd`)**. 덮어쓰기: MCP=overwrite, CLI=사용자 확인(비대화형은 실패, `--force`로 덮어쓰기).
+- **Spec:** `spec/google-genai-mcp.md` — Decisions, 경로 해석, 덮어쓰기
+- **Notes:** 2026-07-23 자동 경로·overwrite 정책 확정
+
+### ASR-017 — 백그라운드 실행 모드
+
+- **Category:** Structure & organization
+- **Status:** approved
+- **Statement:** `background` 파라미터로 요청마다 동기/비동기 동작을 결정. image/audio는 기본 `background=false` (동기), video는 기본 `background=true` (비동기)
+- **Why it matters:** 이미지·TTS는 수 초로 동기 가능, 비디오는 수분으로 비동기 필수. 일관되지 않은 기본값은 사용자 혼란 초래
+- **Depends on:** ASR-004, ASR-011
+- **Related ADRs:** —
+- **Resolution path:** direct-input
+- **Resolution:** 타입별 기본값 — image/audio=`false`, video=`true`. YAML 최상위 `background`로 오버라이드(소스 오브 트루스). MCP `background`는 YAML 미지정 시에만 적용. 유효값: `yaml.background ?? mcp.background ?? typeDefault`. CLI `--background` 플래그 없음. 비동기 산출물은 `download`로 저장.
+- **Spec:** `spec/google-genai-mcp.md` — Decisions, 공통 파라미터
+- **Notes:**
+  - Tasks Extension 안정화 후 마이그레이션 검토
+  - 2026-07-23: audio 기본값을 video와 분리(`false`), YAML 우선 규칙 확정
+
+### ASR-018 — Audio(TTS) 생성 지원
+
+- **Category:** Scope boundary
+- **Status:** approved
+- **Statement:** MVP에 Gemini TTS를 통한 음성 생성 기능을 포함할지 결정
+- **Why it matters:** Image/Video와 함께 멀티미디어 생성 도구로서의 완성도에 영향. 에이전트가 텍스트→음성 변환을 MCP 도구로 직접 호출할 수 있는지 여부
+- **Depends on:** ASR-004
+- **Related ADRs:** —
+- **Resolution path:** direct-input
+- **Resolution:** MVP에 Audio(TTS) 생성 포함. Gemini 3.1 Flash TTS 모델 사용. 단일 화자 및 다중 화자(최대 2명) 지원. 30종 사전 정의 음성 제공. 인라인 오디오 태그로 스타일 제어 지원. 기본 `background=false`(동기).
+- **Spec:** `spec/google-genai-mcp.md` — Audio 스키마, Requirements
+- **Notes:** —
+
+### ASR-019 — Interaction 메타데이터 관리
+
+- **Category:** Structure & organization
+- **Status:** approved
+- **Statement:** Interaction ID와 로컬 파일 경로 간의 매핑 정보를 어떻게 저장하고 관리할지 결정
+- **Why it matters:** Interactions API가 서버에서 전체 상태를 관리하므로, 로컬에는 매핑 정보만 저장. 매핑이 없으면 인터랙티브 모드에서 이전 생성 기록을 효과적으로 관리할 수 없음
+- **Depends on:** ASR-013, ASR-014
+- **Related ADRs:** —
+- **Resolution path:** direct-input
+- **Resolution:** `{dataDir}/interactions.json`에 `interactionId`, `requestFile`(절대 경로), `tmpFile`만 저장. sync/get 시 서버 없는 ID 로컬 삭제. cancel/delete로 서버·로컬 정리. dataDir는 ASR-008.
+- **Spec:** `spec/google-genai-mcp.md` — Interaction 관리, get_interaction 응답
+- **Notes:** 2026-07-23 sync·cancel·delete·get 응답 스키마 확정
+
+### ASR-020 — 인터랙티브 세션 관리
+
+- **Category:** Deliverable form
+- **Status:** approved
+- **Statement:** `gemini` 명령어로 시작하는 인터랙티브 세션의 명령어 구조, 세션 lifecycle, 서버 싱크 방식을 결정
+- **Why it matters:** 인터랙티브 모드는 CLI의 핵심 사용자 경험. 명령어 구조가 직관적이어야 하고, 서버와의 싱크가 정확해야 함
+- **Depends on:** ASR-002, ASR-019
+- **Related ADRs:** —
+- **Resolution path:** direct-input
+- **Resolution:** 명령어: `/list`, `/select N`, `/show`, `/status`, `/download [path]`, `/sync`, `/cancel`, `/delete`. `/sync`는 로컬↔서버 매핑 정리. `/cancel`/`/delete`는 서버 작업 + 로컬 정리.
+- **Spec:** `spec/google-genai-mcp.md` — Requirements, Interaction 관리
+- **Notes:** GUI/Web UI 확장 시 동일한 Interactions API + 로컬 매핑 구조 재사용 가능
+
+### ASR-021 — Multi-turn 편집
+
+- **Category:** Structure & organization
+- **Status:** approved
+- **Statement:** 인터랙티브 모드에서 이전 interaction에 이어서 대화를 이어가는 방식을 결정
+- **Why it matters:** multi-turn 편집이 가능해야 사용자가 생성 결과를 점진적으로 수정할 수 있음. 서버 컨텍스트 관리 방식이 핵심
+- **Depends on:** ASR-014, ASR-020
+- **Related ADRs:** —
+- **Resolution path:** direct-input
+- **Resolution:** Interactions API `previous_interaction_id` 활용. 모달리티(image/video/audio) 사전 차단 없음 — 서버/모델 미지원 시 API 오류를 그대로 전달. 새 interaction 생성 시 로컬 매핑 추가.
+- **Spec:** `spec/google-genai-mcp.md` — Requirements, Interaction 관리
+- **Notes:** 2026-07-23 continue_interaction 모달리티 미차단 확정

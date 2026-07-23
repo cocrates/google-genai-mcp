@@ -1,0 +1,16 @@
+type: music
+model: lyria-3-clip-preview
+
+params:
+  prompt: |
+    A warm lo-fi jazz instrumental for a cozy cafe background.
+    Fingerpicked acoustic guitar playing gentle bossa nova rhythms,
+    soft Fender Rhodes piano chords with warm tremolo,
+    light brushed drums keeping a relaxed groove,
+    and a subtle upright bass line.
+    BPM around 85, key of D major.
+    Mellow, intimate, and inviting — like golden afternoon light
+    through a cafe window. Instrumental only, no vocals.
+  outputFormat: mp3
+
+output: "./output/cafe-bgm.mp3"

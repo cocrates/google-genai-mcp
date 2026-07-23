@@ -1,0 +1,8 @@
+type: speech
+model: gemini-3.1-flash-tts-preview
+params:
+  text: |
+    Say cheerfully: MCP smoke test OK.
+  voice: Kore
+  outputFormat: wav
+output: "./mcp-speech.wav"

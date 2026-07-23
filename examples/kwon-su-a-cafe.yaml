@@ -1,0 +1,13 @@
+type: image
+model: gemini-3.1-flash-image
+
+params:
+  prompt: |
+    Using the provided image, keep the woman's face, hair, body type, and facial features exactly the same. Change only the outfit, background, and pose as follows. Replace the outfit with a fitted off-white cropped cardigan over a white camisole top, paired with a short high-waisted black mini skirt ending mid-thigh, and white ankle boots. Replace the solid background with a cozy cafe interior — warm wooden shelves with potted plants, a chalkboard menu, soft pendant lights, large windows with natural afternoon light, all softly blurred. Change the pose to sitting casually at a small wooden cafe table, holding a smartphone to her right ear with one hand, the other hand gesturing expressively mid-conversation, laughing with a bright joyful smile as if chatting with a close friend. Her head tilts slightly to the left in a relaxed animated posture, one leg crossed over the other under the table. A half-finished iced latte in a tall glass sits on the table beside her, and a small brown leather crossbody bag hangs on the back of her chair. Preserve the original realistic photography style, lighting quality, and overall composition. Medium-full shot from head to knees, slightly low angle, shallow depth of field with creamy bokeh on the cafe background. Warm natural color grade, soft window light illuminating her face and hair with gentle highlights. No text or watermarks.
+  images:
+    - path: "./output/kwon-su-a.png"
+  size: 1K
+  aspectRatio: "16:9"
+  seed: null
+
+output: "./output/kwon-su-a-cafe.png"

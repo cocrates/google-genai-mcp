@@ -1,0 +1,24 @@
+type: video
+model: gemini-omni-flash-preview
+
+params:
+  prompt: |
+    In a single continuous shot, turn this into realistic footage using the image as the starting frame.
+    A young woman sits at a small wooden cafe table, holding a smartphone to her right ear,
+    chatting animatedly with a friend. She gestures naturally with her left hand while talking,
+    occasionally laughing with a bright smile, tilting her head slightly as she listens.
+    Her expression shifts between excitement, amusement, and playful disbelief.
+    The iced latte on the table has condensation slowly dripping down the glass.
+    Warm afternoon light filters through the large cafe window, casting soft shifting shadows.
+    Background: blurred cafe interior with warm pendant lights, wooden shelves, gentle ambient movement.
+    Smooth, subtle handheld camera drift at eye level, maintaining a medium shot.
+    Sound design: soft lo-fi jazz cafe music in the background, distant clinking of cups, muffled ambient chatter.
+    No dialogue.
+  images:
+    - path: "./output/kwon-su-a-cafe.png"
+  durationSeconds: 8
+  aspectRatio: "16:9"
+  task: image_to_video
+  seed: null
+
+output: "./output/cafe-video.mp4"

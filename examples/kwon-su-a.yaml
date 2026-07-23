@@ -1,0 +1,11 @@
+type: image
+model: gemini-3.1-flash-image
+
+params:
+  prompt: |
+    A 22-year-old Korean woman named Kwon Su-a standing facing forward in a full-body pose against a clean solid light gray studio background. She is 168 cm tall with a slim, slender build and a cute, youthful face with soft rounded features, bright eyes, and a warm gentle smile. She has shoulder-length black hair with soft waves parted slightly to one side, natural minimal makeup with a subtle healthy glow on her cheeks. She wears a simple casual outfit: a fitted white short-sleeve cotton t-shirt neatly tucked into high-waisted light blue straight-leg jeans, paired with clean white canvas sneakers. A thin silver bracelet on her left wrist is the only accessory. Her arms rest naturally at her sides with relaxed shoulders and a comfortable upright posture. Full-body frontal shot, centered composition, even soft studio lighting with no harsh shadows, clean and minimal aesthetic. Realistic photography, sharp focus across the entire body, high detail, 8K clarity. Character reference sheet style, neutral and bright mood, no text or watermarks.
+  size: 1K
+  aspectRatio: "9:16"
+  seed: null
+
+output: "./output/kwon-su-a.png"

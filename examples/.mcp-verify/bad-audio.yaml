@@ -1,0 +1,4 @@
+type: audio
+params:
+  text: hi
+output: ./x.wav

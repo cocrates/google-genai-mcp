@@ -1,0 +1,42 @@
+{
+  "name": "@cocrates/google-genai-mcp",
+  "version": "0.1.0",
+  "description": "MCP server and CLI for Google Gemini Image/Video/Audio generation",
+  "type": "module",
+  "engines": {
+    "node": ">=18"
+  },
+  "bin": {
+    "google-genai-mcp": "./dist/mcp/index.js",
+    "gemini": "./dist/cli/index.js"
+  },
+  "main": "./dist/index.js",
+  "exports": {
+    ".": "./dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "test": "vitest run",
+    "start:mcp": "node dist/mcp/index.js",
+    "start:cli": "node dist/cli/index.js"
+  },
+  "dependencies": {
+    "@google/genai": "^2.13.0",
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "glob": "^11.0.0",
+    "yaml": "^2.7.0",
+    "zod": "^3.24.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.8.0",
+    "vitest": "^3.0.0"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "license": "Apache-2.0"
+}
