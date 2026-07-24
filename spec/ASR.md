@@ -199,7 +199,7 @@ Living registry for google-genai-mcp. Status of each ASR must stay current.
 - **Depends on:** ASR-005, ASR-006
 - **Related ADRs:** —
 - **Resolution path:** direct-input
-- **Resolution:** Video 기본 `background=true`로 MCP timeout 회피. `generate`는 ID(+files) 즉시 반환, 완료 후 `download`. CLI 동기 대기: progress(poll 10초), **최대 대기 없음**, Ctrl-C로 중단.
+- **Resolution:** 모든 타입 기본 `background=false` (동기). 장시간은 YAML/`background: true`로 비동기 — `generate`는 ID(+files) 즉시 반환, 완료 후 `download`. CLI 동기 대기: progress(poll 10초), **최대 대기 없음**, Ctrl-C로 중단.
 - **Spec:** `spec/google-genai-mcp.md` — Decisions
 - **Notes:** 2026-07-23 10분 상한 제거
 
@@ -272,16 +272,17 @@ Living registry for google-genai-mcp. Status of each ASR must stay current.
 
 - **Category:** Structure & organization
 - **Status:** approved
-- **Statement:** `background` 파라미터로 요청마다 동기/비동기 동작을 결정. image/audio는 기본 `background=false` (동기), video는 기본 `background=true` (비동기)
-- **Why it matters:** 이미지·TTS는 수 초로 동기 가능, 비디오는 수분으로 비동기 필수. 일관되지 않은 기본값은 사용자 혼란 초래
+- **Statement:** `background` 파라미터로 요청마다 동기/비동기 동작을 결정. image/video/speech/music 모두 기본 `background=false` (동기)
+- **Why it matters:** 기본 동기면 에이전트가 결과를 기다리며, 빈 “백그라운드 알림” 약속을 줄일 수 있음. 장시간은 YAML로만 비동기
 - **Depends on:** ASR-004, ASR-011
 - **Related ADRs:** —
 - **Resolution path:** direct-input
-- **Resolution:** 타입별 기본값 — image/audio=`false`, video=`true`. YAML 최상위 `background`로 오버라이드(소스 오브 트루스). MCP `background`는 YAML 미지정 시에만 적용. 유효값: `yaml.background ?? mcp.background ?? typeDefault`. CLI `--background` 플래그 없음. 비동기 산출물은 `download`로 저장.
+- **Resolution:** 기본값 전 타입 `false`. YAML 최상위 `background`로 오버라이드(소스 오브 트루스). MCP `background`는 YAML 미지정 시에만 적용. 유효값: `yaml.background ?? mcp.background ?? false`. CLI `--background` 플래그 없음. 비동기 산출물은 `download`로 저장.
 - **Spec:** `spec/google-genai-mcp.md` — Decisions, 공통 파라미터
 - **Notes:**
   - Tasks Extension 안정화 후 마이그레이션 검토
   - 2026-07-23: audio 기본값을 video와 분리(`false`), YAML 우선 규칙 확정
+  - 2026-07-24: video 기본도 `false`로 통일 (전 타입 동기 기본)
 
 ### ASR-018 — Audio(TTS) 생성 지원
 

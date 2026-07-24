@@ -316,7 +316,7 @@ export function parseRequestFile(filePath: string): ParsedRequest {
   return { request, absRequestFile, requestDir };
 }
 
-/** Compute effective background flag: yaml ?? mcp ?? type default. */
+/** Compute effective background flag: yaml ?? mcp ?? false (all types). */
 export function resolveBackground(
   request: GenerationRequest,
   mcpBackground?: boolean,
@@ -326,9 +326,6 @@ export function resolveBackground(
   }
   if (typeof mcpBackground === "boolean") {
     return mcpBackground;
-  }
-  if (request.type === "video") {
-    return true;
   }
   return false;
 }

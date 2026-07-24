@@ -51,7 +51,7 @@ export function createServer(): McpServer {
       "Generate image, video, speech (TTS), or music from one YAML/JSON request file (schema assumed known).",
       "Write the request file first, then call this tool with its path. Relative paths inside the file are relative to that file's directory.",
       "Returns { interactionId, files, background }. Sync (background=false): files filled. Async (background=true): files=[] — poll get_interaction until completed, then download.",
-      "Default background when YAML omits it: video=true; image/speech/music=false. Call once per file; for multiple files, call multiple times.",
+      "Default background when YAML omits it: false for image/video/speech/music. Call once per file; for multiple files, call multiple times.",
     ].join(" "),
     {
       filePath: z
@@ -61,7 +61,7 @@ export function createServer(): McpServer {
         .boolean()
         .optional()
         .describe(
-          "Override background only when YAML omits it. Defaults: image/speech/music false, video true",
+          "Override background only when YAML omits it. Default for all types: false",
         ),
     },
     async ({ filePath, background }) => {
@@ -155,7 +155,7 @@ export function createServer(): McpServer {
         .boolean()
         .optional()
         .describe(
-          "Run in background when true. If omitted, uses the original request type default (video true, else false) when a stored request file exists",
+          "Run in background when true. If omitted, uses the original request default (false for all types) when a stored request file exists",
         ),
     },
     async ({ interactionId, text, background }) => {

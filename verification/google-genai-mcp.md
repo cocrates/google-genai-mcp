@@ -29,13 +29,13 @@
 | 11 | [ASR-008] Logging: dataDir-based, file logging, MVP config | pass | `src/core/logger.ts` — YAML-formatted file logger. `src/core/config.ts` — `{logLevel}` schema |
 | 12 | [ASR-009] Test strategy: vitest, 90%+ coverage | partial | `package.json:21` — vitest configured, `tsconfig.json` references. **No test files found** in `src/`. Coverage unverifiable |
 | 13 | [ASR-010] Node.js 18+, required deps only | pass | `package.json:6-8` — `"node": ">=18"`. Deps: `@google/genai`, `@modelcontextprotocol/sdk` |
-| 14 | [ASR-011] Video background=true default, poll 10s, no time limit | pass | `src/core/request.ts:256-270` — `resolveBackground` defaults video to `true`. `src/cli/interactive.ts:95` — 10s poll, infinite loop |
+| 14 | [ASR-011] Background default false; poll 10s, no time limit | pass | `src/core/request.ts` — `resolveBackground` defaults all types to `false`. `src/cli/interactive.ts` — 10s poll, infinite loop |
 | 15 | [ASR-012] TypeScript type safety, internal conversion layer | pass | `src/core/types.ts` — internal types. `src/mcp/tools.ts` — MCP tool names only. Zod schemas in `server.ts` |
 | 16 | [ASR-013] File-based input, MCP single file, CLI multi+glob | pass | `src/cli/index.ts:24-32` — glob expansion. `src/mcp/server.ts:52` — single `filePath` |
 | 17 | [ASR-014] Interactions API primary, generateContent fallback | pass | `src/core/image.ts:203-231`, `src/core/video.ts:202-218`, `src/core/audio.ts:194-222` — all have Interactions + legacy fallback |
 | 18 | [ASR-015] Sync=auto save, async=download | pass | `src/core/image.ts:131-134` — sync saves files, async returns `files: []` |
 | 19 | [ASR-016] Output priority: filePath > YAML output > auto; CLI=CWD, MCP=workspace | pass | `src/core/download.ts:112-128` — priority chain correct. `src/core/paths.ts:31-33` — `process.cwd()` for both (MCP client sets cwd) |
-| 20 | [ASR-017] Background defaults: video=true, image/audio=false; YAML override | pass | `src/core/request.ts:256-270` — `yaml.background ?? mcp.background ?? typeDefault` |
+| 20 | [ASR-017] Background default false all types; YAML override | pass | `src/core/request.ts` — `yaml.background ?? mcp.background ?? false` |
 | 21 | [ASR-018] Audio TTS: 30 voices, single/multi speaker | pass | `src/core/types.ts:147-178` — all 30 voices. `src/core/audio.ts:29-42` — single/multi speaker via `buildSpeechConfig` |
 | 22 | [ASR-019] interactions.json mapping, tmp copies | pass | `src/core/interactions-store.ts` — full CRUD. `src/core/output.ts:57-76` — `copyToTmp` |
 | 23 | [ASR-020] Interactive: /list, /select, /show, /status, /download, /sync, /cancel, /delete | pass | `src/cli/interactive.ts:116-291` — all commands implemented |

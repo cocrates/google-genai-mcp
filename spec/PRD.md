@@ -33,7 +33,7 @@ Google Gemini API의 Image/Video/Speech/Music 생성 기능을 MCP 서버와 CLI
 - CLI 파일 기반 입력 + 인터랙티브 모드 (`/list`, `/select`, `/show`, `/status`, `/download`, `/sync`, `/cancel`, `/delete`)
 - Interaction 관리: `generate`, `download`, `get_interaction`, `continue_interaction`, `list_interactions`, `sync_interactions`, `cancel_interaction`, `delete_interaction`
 - 로컬 매핑 (`interactions.json`) + 서버 sync
-- 백그라운드 실행 (video 기본 `true`, image/speech/music 기본 `false`)
+- 백그라운드 실행 (모든 타입 기본 `false`; YAML/`background`로 비동기 가능)
 
 ### Out of Scope
 

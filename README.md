@@ -175,8 +175,8 @@ node dist/mcp/index.js
 ### 수동 스모크 체크리스트
 
 1. `gemini`로 image YAML 생성 → `interactionId` + 파일 경로 확인  
-2. video YAML → background ID 반환 후 `/status` · `/download`  
-3. MCP `generate` → `get_interaction` → (필요 시) `download`  
+2. video YAML → `generate` 완료 후 파일 경로 확인 (필요 시 `background: true` + `/status` · `/download`)  
+3. MCP `generate` → (async면) `get_interaction` → `download`  
 4. `/sync`, `/cancel`, `/delete` 동작 확인  
 
 단위·통합 테스트는 `npm test`로 실행합니다 (vitest).

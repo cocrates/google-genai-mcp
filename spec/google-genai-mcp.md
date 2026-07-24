@@ -92,8 +92,8 @@ Google Gemini API의 Image / Video / Speech(TTS) / Music 생성 기능을 MCP �
 - 바이너리 의존성 배제
 
 ### 비디오 생성 시간 초과 (ASR-011)
-- Video 기본 `background=true`로 MCP timeout 회피 — `interactionId` 즉시 반환
-- 완료 후 `download`로 로컬 저장
+- 모든 타입 기본 `background=false` (동기 대기). 장시간 작업은 YAML/`background: true`로 비동기
+- 비동기 시 `interactionId` 즉시 반환, 완료 후 `download`로 로컬 저장
 - CLI 동기 대기 시: progress 표시 (poll 간격 10초). **최대 대기 시간 제한 없음** — 사용자가 Ctrl-C로 중단
 
 ### TypeScript 타입 안전성 (ASR-012)
@@ -131,12 +131,10 @@ Google Gemini API의 Image / Video / Speech(TTS) / Music 생성 기능을 MCP �
   - CLI: 대상 파일이 있으면 **사용자에게 확인** 후 결정 (비대화형/TTY 없으면 실패 — `--force`로 덮어쓰기)
 
 ### 백그라운드 실행 (ASR-017)
-- **타입별 기본값:**
-  - Image / Speech / Music: `background=false` (동기)
-  - Video: `background=true` (비동기)
-  - Music Pro(장편)는 YAML에서 `background=true` 권장
+- **기본값:** image / video / speech / music 모두 `background=false` (동기)
+- Music Pro(장편) 등 장시간은 YAML에서 `background=true` 권장
 - **오버라이드:** YAML 최상위 `background` (요청 파일 = 소스 오브 트루스). MCP `background` 파라미터는 YAML에 없을 때만 적용
-- **유효값 계산:** `yaml.background ?? mcp.background ?? typeDefault`
+- **유효값 계산:** `yaml.background ?? mcp.background ?? false`
 - CLI는 YAML의 `background`를 따름 (별도 `--background` 플래그 없음)
 
 ### Speech(TTS) 생성 (ASR-018)
@@ -293,7 +291,7 @@ output: {출력 파일 경로}         # 요청 파일 디렉터리 기준 상�
 |------|------|------|--------|-----|
 | `type` | ✅ | enum | — | `"image"`, `"video"`, `"speech"`, `"music"` (`"audio"` 폐기) |
 | `model` | ❌ | string | 타입별 기본 모델 | 타입별 허용 모델 |
-| `background` | ❌ | boolean | image/speech/music=`false`, video=`true` | 동기/비동기 오버라이드 |
+| `background` | ❌ | boolean | `false` (모든 타입) | 동기/비동기 오버라이드 |
 | `output` | ❌ | string | 자동 생성 | 출력 파일 경로 (요청 파일 디렉터리 기준) |
 ### Image 요청
 
@@ -365,12 +363,12 @@ output: "./output/result.mp4"
 | `params.aspectRatio` | ❌ | string | `"16:9"` | `"16:9"`, `"9:16"` |
 | `params.task` | ❌ | enum | 이미지 수로 추론 | `text_to_video`, `image_to_video`, `reference_to_video`, `edit` |
 | `params.seed` | ❌ | int \| null | `null` | 재현성 시드 |
-| `background` | ❌ | boolean | `true` | 공통 파라미터 참조 |
+| `background` | ❌ | boolean | `false` | 공통 파라미터 참조 |
 | `output` | ❌ | string | 자동 생성 | 출력 파일 경로 (.mp4, 요청 파일 디렉터리 기준) |
 
 ### Video 전용 고려사항
 - **모델:** Gemini Omni Flash (`gemini-omni-flash-preview`) — Interactions API 네이티브. Veo(`generateVideos`)는 사용하지 않음
-- Video 생성은 **비동기 기본** — `background=true`. 완료 후 `download`로 로컬 저장
+- Video 기본은 **동기** (`background=false`). 장시간이면 YAML에서 `background=true` 후 `download`로 저장
 - `delivery=uri`로 요청 (대용량 대비). 이후 get/download는 inline/uri 모두 처리
 - Conversational editing: `continue_interaction` / 인터랙티브 이어가기로 이전 영상을 자연어 수정 (`previous_interaction_id`)
 - `task` 미지정 시: 이미지 0→`text_to_video`, 1→`image_to_video`, 2+→`reference_to_video`
