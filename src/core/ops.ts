@@ -19,6 +19,7 @@ import type { GenerateFromFileOptions } from "./generate.js";
 import { extractMediaFromInteraction, interactionErrorMessage } from "./media.js";
 import {
   assertCanWrite,
+  ensureWavContainer,
   extensionForMime,
   generateOutputFilename,
   saveOutputFile,
@@ -303,8 +304,16 @@ async function saveContinueMedia(
         : undefined,
     });
 
+    const wantsWav =
+      ext === "wav" ||
+      outputPath.toLowerCase().endsWith(".wav") ||
+      item.mimeType.startsWith("audio/l16") ||
+      item.mimeType === "audio/pcm";
+    const payload = wantsWav ? ensureWavContainer(item.data) : item.data;
+    const outMime = wantsWav ? "audio/wav" : item.mimeType;
+
     files.push(
-      saveOutputFile(item.data, outputPath, item.mimeType, { overwrite: true }),
+      saveOutputFile(payload, outputPath, outMime, { overwrite: true }),
     );
   }
 

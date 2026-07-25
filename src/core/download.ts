@@ -12,6 +12,7 @@ import { extractMediaFromInteraction, interactionErrorMessage } from "./media.js
 import { extractLyricsText } from "./music.js";
 import {
   assertCanWrite,
+  ensureWavContainer,
   extensionForMime,
   generateOutputFilename,
   saveOutputFile,
@@ -139,8 +140,17 @@ export async function downloadInteraction(
         : undefined,
     });
 
+    // Gemini TTS returns raw L16 PCM; wrap as WAV when saving .wav (same as speech.ts).
+    const wantsWav =
+      ext === "wav" ||
+      outputPath.toLowerCase().endsWith(".wav") ||
+      item.mimeType.startsWith("audio/l16") ||
+      item.mimeType === "audio/pcm";
+    const payload = wantsWav ? ensureWavContainer(item.data) : item.data;
+    const outMime = wantsWav ? "audio/wav" : item.mimeType;
+
     files.push(
-      saveOutputFile(item.data, outputPath, item.mimeType, { overwrite: true }),
+      saveOutputFile(payload, outputPath, outMime, { overwrite: true }),
     );
     options.logger?.info(`Downloaded: ${files[files.length - 1]!.filePath}`);
   }
