@@ -26,7 +26,8 @@ Living registry for google-genai-mcp. Status of each ASR must stay current.
 | ASR-015 | 산출물 보관 전략 | Structure & organization | approved | — | spec/google-genai-mcp.md — Decisions |
 | ASR-016 | 출력 파일 위치 관리 | Deliverable form | approved | — | spec/google-genai-mcp.md — Decisions, Requirements |
 | ASR-017 | 백그라운드 실행 모드 | Structure & organization | approved | — | spec/google-genai-mcp.md — Decisions |
-| ASR-018 | Audio(TTS) 생성 지원 | Scope boundary | approved | — | spec/google-genai-mcp.md — Audio 스키마, Requirements |
+| ASR-018 | Audio(TTS) 생성 지원 | Scope boundary | approved | adr/speech-long-form-chunking.md (approved) | spec/google-genai-mcp.md — Audio 스키마, Requirements |
+| ASR-022 | 장문 Speech 분할·병합 전략 | Structure & organization | approved | adr/speech-long-form-chunking.md, adr/speech-chunk-failure-recovery.md | spec/google-genai-mcp.md — 장문 Speech 분할·병합, 장문 Speech 처리 |
 
 ## Dependency Order (recommended review path)
 
@@ -51,6 +52,7 @@ Living registry for google-genai-mcp. Status of each ASR must stay current.
 19. ASR-010 (Node.js 버전 호환성 및 의존성 관리)
 20. ASR-009 (테스트 전략)
 21. ASR-018 (Audio(TTS) 생성 지원)
+22. ASR-022 (장문 Speech 분할·병합 전략)
 
 ## ASR Detail
 
@@ -145,11 +147,12 @@ Living registry for google-genai-mcp. Status of each ASR must stay current.
 - **Statement:** Gemini API 오류(인증 실패, rate limit, quota 초과, 서비스 불가), MCP 프로토콜 오류, CLI 입력 오류를 어떻게 처리하고 사용자에게 전달할지 결정
 - **Why it matters:** 오류 처리가 일관되지 않으면 에이전트가 잘못된 결과를 해석하거나, 사용자가 원인을 파악하기 어려워짐. 재시도 가능 여부도 아키텍처에 영향
 - **Depends on:** ASR-005
-- **Related ADRs:** —
+- **Related ADRs:**
+  - `adr/speech-chunk-failure-recovery.md` — approved — 장문 청크 루프에 기존 분류·백오프 규칙을 확장 적용
 - **Resolution path:** direct-input
 - **Resolution:** 유형별 처리: 입력 오류(즉시 실패), 인증 오류(즉시 실패), rate limit(지수 백오프 최대 3회), 서비스 오류(지수 백오프 최대 2회), quota 초과(즉시 실패). MCP는 tool error 응답, CLI는 stderr + exit code (0:성공, 1:일반, 2:입력, 3:인증, 4:API). 재시도는 rate limit과 일시적 서비스 오류만.
 - **Spec:** —
-- **Notes:** —
+- **Notes:** 장문 Speech 청크 단위 적용은 ASR-022 참조
 
 ### ASR-008 — 로깅 및 관찰 가능성
 
@@ -291,11 +294,12 @@ Living registry for google-genai-mcp. Status of each ASR must stay current.
 - **Statement:** MVP에 Gemini TTS를 통한 음성 생성 기능을 포함할지 결정
 - **Why it matters:** Image/Video와 함께 멀티미디어 생성 도구로서의 완성도에 영향. 에이전트가 텍스트→음성 변환을 MCP 도구로 직접 호출할 수 있는지 여부
 - **Depends on:** ASR-004
-- **Related ADRs:** —
+- **Related ADRs:**
+  - `adr/speech-long-form-chunking.md` — approved — 장문 분할·병합 (ASR-022와 공유)
 - **Resolution path:** direct-input
 - **Resolution:** MVP에 Audio(TTS) 생성 포함. Gemini 3.1 Flash TTS 모델 사용. 단일 화자 및 다중 화자(최대 2명) 지원. 30종 사전 정의 음성 제공. 인라인 오디오 태그로 스타일 제어 지원. 기본 `background=false`(동기).
 - **Spec:** `spec/google-genai-mcp.md` — Audio 스키마, Requirements
-- **Notes:** —
+- **Notes:** 장문 동작은 ASR-022에서 별도 결정
 
 ### ASR-019 — Interaction 메타데이터 관리
 
@@ -335,3 +339,19 @@ Living registry for google-genai-mcp. Status of each ASR must stay current.
 - **Resolution:** Interactions API `previous_interaction_id` 활용. 모달리티(image/video/audio) 사전 차단 없음 — 서버/모델 미지원 시 API 오류를 그대로 전달. 새 interaction 생성 시 로컬 매핑 추가.
 - **Spec:** `spec/google-genai-mcp.md` — Requirements, Interaction 관리
 - **Notes:** 2026-07-23 continue_interaction 모달리티 미차단 확정
+
+### ASR-022 — 장문 Speech 분할·병합 전략
+
+- **Category:** Structure & organization
+- **Status:** approved
+- **Statement:** 장문 TTS 요청을 단일 API 호출로 둘지, TRANSCRIPT 줄/문장 단위로 나눠 생성한 뒤 무음 간격을 넣어 wav로 이어붙일지 결정
+- **Why it matters:** 장문 동기 TTS는 CLI에서 progress 없이 장시간 대기로 “멈춤”처럼 보이고, Google도 수 분 초과 출력의 품질 저하를 경고하며 청크 분할을 권장함
+- **Depends on:** ASR-018, ASR-002, ASR-017, ASR-007
+- **Related ADRs:**
+  - `adr/speech-long-form-chunking.md` — approved — Option C: 임계값 초과 시 문단/문장 분할 + 무음 삽입 병합 저장
+  - `adr/speech-chunk-failure-recovery.md` — approved — Option C: 청크별 재시도 + 부분 캐시 & Resume
+- **Resolution path:** adr
+- **Resolution:** 낭독 본문 4,000 bytes 초과 시 문단(빈 줄) 단위 분할, 1,500 bytes 초과 문단만 문장 단위 재분할. `#### TRANSCRIPT` 앞 프리앰블은 임계값 제외·전 청크 재부착. 청크 PCM을 그대로 이어붙여 단일 WAV(24kHz·16bit·mono)로 병합(청크 사이 무음 삽입 없음 — 각 청크가 이미 앞뒤 무음 포함, 2026-07-26 개정). 청크별 재시도(rate limit 3회, 5xx 2회); 인증·quota·400은 즉시 중단. 부분 wav 미저장, 무음 대체 금지. 성공 청크는 `{dataDir}/chunks/{requestHash}/{NNN}.pcm`에 캐시하여 재실행 시 자동 재사용, 성공 병합 시 삭제·실패분 7일 후 GC. 로직은 core에 두어 CLI·MCP 공통, `interactions.json`에는 대표 1건만 등록.
+- **Spec:** `spec/google-genai-mcp.md` — 장문 Speech 분할·병합 (ASR-022), Requirements 장문 Speech 처리
+- **Notes:** 2026-07-25 장문 생성 경험으로 제기. wav concat은 기술적으로 가능(L16→WAV 래핑 전제). 미결: 진행/실패 보고 문구 세부, 청크 간 동시성 상한.
+

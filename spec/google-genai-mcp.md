@@ -143,6 +143,54 @@ Google Gemini API의 Image / Video / Speech(TTS) / Music 생성 기능을 MCP �
 - 인라인 오디오 태그로 톤/속도 제어 (`[whisper]`, `[slowly]` 등)
 - 텍스트 전용 입력 → 오디오 전용 출력 ([Speech generation](https://ai.google.dev/gemini-api/docs/speech-generation))
 
+### 장문 Speech 분할·병합 (ASR-022)
+
+**분할 발동 조건**
+- `params.text`의 **낭독 본문(TRANSCRIPT)** 이 **4,000 bytes(UTF-8) 초과**일 때만 분할. 이하면 기존과 동일하게 단일 요청
+- 판정 기준은 문자수가 아닌 **바이트 수** (Cloud TTS 문서의 text field 제한 4,000 bytes와 정합)
+
+**프리앰블 분리**
+- `#### TRANSCRIPT` 마커가 있으면 그 **이전 전체를 스타일 프리앰블**(`# SPEECH SYNTHESIS`, `AUDIO PROFILE`, `DIRECTOR'S NOTES` 등), **이후를 낭독 본문**으로 분리
+- 마커가 없으면 전체를 낭독 본문으로 취급하고 프리앰블은 빈 문자열
+- 프리앰블은 낭독 대상이 아니므로 **모든 청크 요청에 원문 그대로 재부착**. 임계값 판정에는 포함하지 않음
+
+**청크 경계 규칙**
+- 1차 경계: **문단** — 낭독 본문을 빈 줄(연속 개행)로 분할
+- 2차 경계: 한 문단이 **1,500 bytes 초과**면 그 문단만 **문장 단위로 재분할** (`.`, `?`, `!`, `。` 및 개행 기준)
+- 짧은 인접 문단끼리 **병합하지 않음** (경계는 작성자 의도를 따름)
+- 문장 재분할 후에도 1,500 bytes를 넘는 단일 문장은 그대로 한 청크로 보냄
+- 화자 접두사(`수아:` 등)를 포함한 줄은 접두사째로 청크에 유지
+
+**병합**
+- 청크 오디오(L16 PCM)를 순서대로 그대로 concat 후 **단일 WAV 헤더로 래핑**하여 `output` 경로에 저장 (24kHz / 16-bit / mono)
+- **청크 사이에 무음을 삽입하지 않음** — 각 청크 오디오가 이미 앞뒤 무음을 포함하므로 추가 간격은 불필요하고 어색한 공백을 만듦
+- 최종 산출물은 **1개 파일**. 중간 청크 파일은 사용자 산출물이 아님
+
+**실패 처리 및 재시도 (ASR-007 확장)**
+- 청크마다 기존 오류 분류·백오프를 적용: rate limit 최대 3회, 일시적 서비스 오류(5xx) 최대 2회, 지수 백오프
+- **재시도하지 않고 즉시 전체 중단:** 인증 실패, quota 초과 (남은 청크도 반드시 실패하므로 N배 시도 금지)
+- **재시도하지 않고 중단:** 입력 오류 400 (`PROHIBITED_CONTENT` 등 프롬프트 분류기 차단 포함). 동일 텍스트 재시도는 무의미
+- 실패 시 **부분 `.wav`를 저장하지 않음**. 실패를 무음으로 대체해 계속 진행하지 않음
+- 실패 보고에 **청크 인덱스(`3/27`), 해당 청크 원문 발췌, 오류 분류**를 포함
+
+**부분 캐시 및 Resume**
+- 성공한 청크의 PCM을 `{dataDir}/chunks/{requestHash}/{NNN}.pcm`에 보존
+- `{requestHash}`는 **model + voice/speakers + outputFormat + 프리앰블 + 낭독 본문 전체 + 경계 규칙 버전**의 해시. `{NNN}`은 0부터의 청크 순번
+- 재실행 시 **자동으로** 캐시된 청크를 재사용하고 없는 청크만 API 호출 (별도 플래그 불필요)
+- **성공적으로 병합·저장하면 해당 `{requestHash}` 캐시 디렉터리를 삭제**
+- 실패로 남은 캐시는 **7일 보존 후 정리(GC)**. GC는 speech 생성 진입 시 만료 디렉터리를 제거
+- 텍스트·음성·모델·경계 규칙이 바뀌면 해시가 달라져 캐시는 자연히 무효화됨
+
+**적용 범위 및 Interaction 기록**
+- 분할·병합·캐시 로직은 **`core`에 위치**하며 **CLI와 MCP 모두 동일하게** 적용
+- 청크마다 서버 interaction이 생성되지만 `interactions.json`에는 **대표 1건만 등록** (마지막 청크의 interaction ID)
+- 개별 청크 interaction ID는 로그에만 기록. `/list`·`/show`에 N건이 노출되지 않음
+- 진행 상황은 `onProgress`로 청크 단위 보고:
+  - 시작: `Long-form speech: N chunk(s), transcript B bytes`
+  - 청크: `Speech chunk i/N: generating (B bytes) — "excerpt"` / `cache hit — "excerpt"` / `done`
+  - 대기 중(동기 poll): `Speech chunk i/N: in_progress`
+  - 병합: `Merging N chunk(s) (generated G, cache C)…` → `Long-form speech complete → path`
+
 ### Music(Lyria 3) 생성
 - Lyria 3 Clip (`lyria-3-clip-preview`) / Pro (`lyria-3-pro-preview`) + Interactions API
 - Clip: 30초 고정. Pro: 수분 풀송(프롬프트·타임스탬프로 길이/구조 제어)
@@ -202,11 +250,18 @@ Google Gemini API의 Image / Video / Speech(TTS) / Music 생성 기능을 MCP �
 │   ├── {hash1}.yaml
 │   ├── {hash2}.yaml
 │   └── ...
+├── chunks/                       # 장문 Speech 청크 PCM 캐시 (미완료 작업분)
+│   └── {requestHash}/
+│       ├── 000.pcm
+│       ├── 001.pcm
+│       └── ...
 ├── interactions.json             # interactionId ↔ 파일 경로 매핑
 ├── config.json                   # MVP: logLevel
 └── logs/
     └── {date}.log
 ```
+
+- `chunks/`는 내부 작업 캐시로, 성공 병합 시 해당 `{requestHash}` 디렉터리를 삭제하며 실패분은 7일 후 정리된다
 
 ### interactions.json 스키마
 
@@ -453,6 +508,8 @@ output: "./output/dialogue.wav"
 - **기본 동기** (`background=false`)
 - Interactions: `response_format.type=audio` + `generation_config.speech_config`
 - 이미지/영상 입력 불가 (텍스트 only)
+- **장문 자동 분할:** 낭독 본문이 4,000 bytes를 넘으면 문단(1,500 bytes 초과 시 문장) 단위로 나눠 순차 생성하고 그대로 이어붙여 단일 WAV로 병합 (청크 자체 앞뒤 무음으로 충분, 별도 간격 삽입 없음) — "장문 Speech 분할·병합 (ASR-022)" 참조
+- 모델은 수 분 초과 출력에서 품질·일관성이 저하되므로 장문은 분할이 기본 동작
 
 ### Music 요청 (Lyria 3)
 
@@ -674,6 +731,23 @@ Use the following lyrics and section tags:
 - `images[].path`로 지정된 파일 존재 여부 검증
 - 모델별 참조 이미지 수 제한 검증 (Image: 19개, Video: 3개)
 
+### 장문 Speech 처리
+- 낭독 본문이 4,000 bytes(UTF-8) 이하면 단일 API 요청으로 처리 (기존 동작 유지)
+- 낭독 본문이 4,000 bytes를 초과하면 자동 분할: 문단(빈 줄) 단위 → 1,500 bytes 초과 문단만 문장 단위 재분할
+- `#### TRANSCRIPT` 마커 앞의 프리앰블은 임계값 판정에서 제외하고, 모든 청크 요청에 원문 그대로 재부착
+- 청크 오디오를 순서대로 그대로 이어붙여 **단일 WAV 파일 1개**로 저장 (청크 사이 무음 삽입 없음 — 각 청크가 이미 앞뒤 무음 포함)
+- 병합 결과는 24kHz / 16-bit / mono WAV 헤더를 가진 재생 가능한 파일
+- 청크 단위 진행 상황을 `onProgress`로 보고 (시작 요약, `Speech chunk i/N` + generating/cache hit/done, 병합·완료 메시지). CLI는 stdout에 출력
+- 청크 실패 시 rate limit 최대 3회, 5xx 최대 2회 지수 백오프 재시도
+- 인증 실패 · quota 초과 · 400 입력 오류(`PROHIBITED_CONTENT` 포함)는 재시도 없이 즉시 전체 중단
+- 실패 시 부분 `.wav`를 저장하지 않으며, 실패 청크를 무음으로 대체해 진행하지 않음
+- 실패 메시지에 청크 인덱스 · 해당 청크 원문 발췌 · 오류 분류를 포함
+- 성공한 청크 PCM을 `{dataDir}/chunks/{requestHash}/{NNN}.pcm`에 저장하고, 재실행 시 자동 재사용
+- 병합·저장 성공 시 해당 `{requestHash}` 캐시 디렉터리를 삭제
+- 7일이 지난 캐시 디렉터리는 speech 생성 진입 시 정리
+- 분할·병합·캐시 로직은 `core`에 위치하며 CLI와 MCP 동작이 동일
+- `interactions.json`에는 대표 1건(마지막 청크의 interaction ID)만 등록하며, 개별 청크 ID는 로그에만 기록
+
 ### 출력 관리
 - 동기 `generate`: 결과를 저장 후 `{ interactionId, files, background: false }` 반환
 - 비동기 `generate`: `{ interactionId, files: [], background: true }` — `download`로 저장
@@ -722,6 +796,8 @@ Use the following lyrics and section tags:
 - `spec/PRD.md` — 프로젝트 목표 및 범위
 - `adr/mcp-transport.md` — stdio 전용 결정 (approved)
 - `adr/gemini-client-lifecycle.md` — 싱글톤 클라이언트 결정 (approved)
+- `adr/speech-long-form-chunking.md` — 장문 Speech 분할 방식 결정 (approved)
+- `adr/speech-chunk-failure-recovery.md` — 청크 실패 재시도·resume 결정 (approved)
 
 ## Tags
-`mcp`, `gemini-api`, `image-generation`, `video-generation`, `speech-generation`, `music-generation`, `tts`, `lyria`, `yaml`, `cli`, `interactive-mode`, `multi-turn`, `interactions-api`, `download`, `sync`, `cancel`, `delete`
+`mcp`, `gemini-api`, `image-generation`, `video-generation`, `speech-generation`, `music-generation`, `tts`, `lyria`, `yaml`, `cli`, `interactive-mode`, `multi-turn`, `interactions-api`, `download`, `sync`, `cancel`, `delete`, `long-form-chunking`, `wav-concat`, `chunk-cache`

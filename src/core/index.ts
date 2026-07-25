@@ -25,6 +25,8 @@ export * from "./generate.js";
 export * from "./image.js";
 export * from "./video.js";
 export * from "./speech.js";
+export * from "./speech-chunking.js";
+export * from "./speech-chunk-cache.js";
 export * from "./music.js";
 export * from "./download.js";
 export {
