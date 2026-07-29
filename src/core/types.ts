@@ -12,6 +12,14 @@ export interface ImageRef {
   path: string;
 }
 
+/** Multimodal reference for Omni video (image / video / audio). */
+export type MediaRefType = "image" | "video" | "audio";
+
+export interface MediaRef {
+  path: string;
+  type: MediaRefType;
+}
+
 export interface ImageParams {
   prompt: string;
   images?: ImageRef[];
@@ -22,7 +30,11 @@ export interface ImageParams {
 
 export interface VideoParams {
   prompt: string;
-  images?: ImageRef[];
+  /**
+   * Multimodal references (image, video, audio). Prefer this over legacy
+   * `params.images` in YAML (images are still accepted and mapped here).
+   */
+  references?: MediaRef[];
   /** Output duration in seconds (sent as response_format.duration, e.g. "8s"). */
   durationSeconds?: number;
   /**
@@ -32,12 +44,6 @@ export interface VideoParams {
   resolution?: string;
   aspectRatio?: "16:9" | "9:16";
   seed?: number | null;
-  /** Omni video task; inferred from images when omitted. */
-  task?:
-    | "text_to_video"
-    | "image_to_video"
-    | "reference_to_video"
-    | "edit";
 }
 
 export interface SpeechSpeaker {

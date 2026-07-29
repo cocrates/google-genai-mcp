@@ -14,7 +14,7 @@ import {
   assertCanWrite,
   extensionForMime,
   generateOutputFilename,
-  getImageMimeType,
+  getMediaMimeType,
   saveOutputFile,
 } from "./output.js";
 import {
@@ -22,6 +22,7 @@ import {
   GeminiError,
   type GenerationResult,
   type MediaGenerationOptions,
+  type MediaRef,
   type VideoRequest,
 } from "./types.js";
 
@@ -31,15 +32,15 @@ const DEFAULT_MODEL = "gemini-omni-flash-preview";
 function buildInputParts(request: VideoRequest): unknown[] {
   const parts: unknown[] = [];
 
-  // Omni examples put reference images before the text prompt.
-  if (request.params.images) {
-    for (const image of request.params.images) {
-      const data = fs.readFileSync(image.path);
-      const ext = path.extname(image.path).toLowerCase();
+  // Omni examples put reference media before the text prompt.
+  if (request.params.references) {
+    for (const ref of request.params.references) {
+      const data = fs.readFileSync(ref.path);
+      const ext = path.extname(ref.path).toLowerCase();
       parts.push({
-        type: "image",
+        type: ref.type,
         data: data.toString("base64"),
-        mime_type: getImageMimeType(ext),
+        mime_type: getMediaMimeType(ext, ref.type),
       });
     }
   }
@@ -50,12 +51,13 @@ function buildInputParts(request: VideoRequest): unknown[] {
 
 function inferTask(
   request: VideoRequest,
-): NonNullable<VideoRequest["params"]["task"]> {
-  if (request.params.task) return request.params.task;
-  const n = request.params.images?.length ?? 0;
-  if (n >= 2) return "reference_to_video";
-  if (n === 1) return "image_to_video";
-  return "text_to_video";
+): "text_to_video" | "image_to_video" | "reference_to_video" {
+  const refs = request.params.references ?? [];
+  if (refs.length === 0) return "text_to_video";
+
+  const onlyImages = refs.every((r: MediaRef) => r.type === "image");
+  if (onlyImages && refs.length === 1) return "image_to_video";
+  return "reference_to_video";
 }
 
 async function saveVideoMedia(
@@ -130,6 +132,18 @@ export async function generateVideo(
     );
   }
 
+  const refs = request.params.references ?? [];
+  if (refs.some((r) => r.type === "audio")) {
+    options.logger?.warn(
+      "Audio references are in the request schema but unsupported by the current Omni API; the call may fail or ignore them",
+    );
+  }
+  if (refs.filter((r) => r.type === "video").length > 1) {
+    options.logger?.warn(
+      "Multiple video references may degrade Omni quality (API limitation)",
+    );
+  }
+
   const params: Record<string, unknown> = {
     model,
     input: buildInputParts(request),
@@ -140,7 +154,7 @@ export async function generateVideo(
   };
 
   options.logger?.info(
-    `Generating video with model: ${model} (task=${task}, background=${options.background})`,
+    `Generating video with model: ${model} (task=${task}, refs=${refs.length}, background=${options.background})`,
   );
 
   let interaction = await createInteraction(params, options.logger);

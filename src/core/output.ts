@@ -132,6 +132,17 @@ export function getImageMimeType(ext: string): string {
   return map[ext.toLowerCase()] ?? "image/png";
 }
 
+export function getVideoMimeType(ext: string): string {
+  const map: Record<string, string> = {
+    ".mp4": "video/mp4",
+    ".webm": "video/webm",
+    ".mov": "video/quicktime",
+    ".mpeg": "video/mpeg",
+    ".mpg": "video/mpeg",
+  };
+  return map[ext.toLowerCase()] ?? "video/mp4";
+}
+
 export function getAudioMimeType(format: string): string {
   const map: Record<string, string> = {
     wav: "audio/wav",
@@ -139,6 +150,50 @@ export function getAudioMimeType(format: string): string {
     ogg: "audio/ogg",
   };
   return map[format] ?? "audio/wav";
+}
+
+/** MIME for a media reference by extension (image / video / audio). */
+export function getMediaMimeType(
+  ext: string,
+  type: "image" | "video" | "audio",
+): string {
+  const e = ext.toLowerCase();
+  if (type === "image") return getImageMimeType(e);
+  if (type === "video") return getVideoMimeType(e);
+  const audioMap: Record<string, string> = {
+    ".wav": "audio/wav",
+    ".mp3": "audio/mpeg",
+    ".mpeg": "audio/mpeg",
+    ".ogg": "audio/ogg",
+    ".m4a": "audio/mp4",
+    ".aac": "audio/aac",
+    ".flac": "audio/flac",
+  };
+  return audioMap[e] ?? "audio/mpeg";
+}
+
+/** Infer media kind from file extension when YAML omits `type`. */
+export function inferMediaRefType(filePath: string): "image" | "video" | "audio" {
+  const ext = path.extname(filePath).toLowerCase();
+  if (
+    [".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp", ".heic", ".heif"].includes(
+      ext,
+    )
+  ) {
+    return "image";
+  }
+  if ([".mp4", ".webm", ".mov", ".mpeg", ".mpg", ".avi", ".mkv"].includes(ext)) {
+    return "video";
+  }
+  if (
+    [".mp3", ".wav", ".ogg", ".m4a", ".aac", ".flac", ".opus"].includes(ext)
+  ) {
+    return "audio";
+  }
+  throw new GeminiError(
+    `Cannot infer media type from extension "${ext}" for ${filePath}; set type: image|video|audio`,
+    ErrorCode.INVALID_INPUT,
+  );
 }
 
 /**

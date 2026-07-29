@@ -2,11 +2,14 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { parse as parseYaml } from "yaml";
 import { resolveAgainst } from "./paths.js";
+import { inferMediaRefType } from "./output.js";
 import {
   ErrorCode,
   GeminiError,
   type GenerationRequest,
   type ImageRequest,
+  type MediaRef,
+  type MediaRefType,
   type MusicRequest,
   type ParsedRequest,
   type SpeechRequest,
@@ -14,10 +17,12 @@ import {
 } from "./types.js";
 
 const MAX_IMAGE_REFS = 19;
-/** Omni accepts multiple subject/reference images; keep a practical upper bound. */
+/** Omni accepts multiple multimodal references; keep a practical upper bound. */
 const MAX_VIDEO_REFS = 10;
 /** Lyria 3 supports up to 10 inspiration images. */
 const MAX_MUSIC_REFS = 10;
+
+const MEDIA_REF_TYPES = new Set<MediaRefType>(["image", "video", "audio"]);
 
 function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -74,6 +79,107 @@ function resolveImages(
   return images;
 }
 
+function resolveMediaRefs(
+  rawRefs: unknown,
+  requestDir: string,
+  maxCount: number,
+  fieldLabel: string,
+  defaultType?: MediaRefType,
+): MediaRef[] | undefined {
+  if (rawRefs === undefined) {
+    return undefined;
+  }
+
+  if (!Array.isArray(rawRefs)) {
+    throw new GeminiError(
+      `${fieldLabel} must be an array for video requests`,
+      ErrorCode.INVALID_INPUT,
+    );
+  }
+
+  if (rawRefs.length > maxCount) {
+    throw new GeminiError(
+      `video requests support at most ${maxCount} references`,
+      ErrorCode.INVALID_INPUT,
+    );
+  }
+
+  const refs: MediaRef[] = [];
+  for (let i = 0; i < rawRefs.length; i++) {
+    const item = rawRefs[i];
+    if (!isObject(item)) {
+      throw new GeminiError(
+        `Each ${fieldLabel} entry must be an object with path`,
+        ErrorCode.INVALID_INPUT,
+      );
+    }
+    const refPath = requireString(item, "path", `${fieldLabel}[].path`);
+    const resolved = resolveAgainst(requestDir, refPath);
+    if (!fs.existsSync(resolved)) {
+      throw new GeminiError(
+        `Reference file not found: ${resolved}`,
+        ErrorCode.INVALID_INPUT,
+      );
+    }
+
+    let type: MediaRefType;
+    if (typeof item.type === "string") {
+      if (!MEDIA_REF_TYPES.has(item.type as MediaRefType)) {
+        throw new GeminiError(
+          `${fieldLabel}[${i}].type must be image, video, or audio`,
+          ErrorCode.INVALID_INPUT,
+        );
+      }
+      type = item.type as MediaRefType;
+    } else if (defaultType) {
+      type = defaultType;
+    } else {
+      type = inferMediaRefType(resolved);
+    }
+
+    refs.push({ path: resolved, type });
+  }
+
+  return refs;
+}
+
+/** Prefer params.references; legacy params.images maps to image refs. */
+function resolveVideoReferences(
+  paramsRaw: Record<string, unknown>,
+  requestDir: string,
+): MediaRef[] | undefined {
+  const hasReferences = paramsRaw.references !== undefined;
+  const hasImages = paramsRaw.images !== undefined;
+
+  if (hasReferences && hasImages) {
+    throw new GeminiError(
+      "Use params.references or params.images for video, not both",
+      ErrorCode.INVALID_INPUT,
+    );
+  }
+
+  if (hasReferences) {
+    return resolveMediaRefs(
+      paramsRaw.references,
+      requestDir,
+      MAX_VIDEO_REFS,
+      "params.references",
+    );
+  }
+
+  if (hasImages) {
+    return resolveMediaRefs(
+      paramsRaw.images,
+      requestDir,
+      MAX_VIDEO_REFS,
+      "params.images",
+      "image",
+    );
+  }
+
+  return undefined;
+}
+
 function parseImageRequest(
   raw: Record<string, unknown>,
   requestDir: string,
@@ -123,13 +229,13 @@ function parseVideoRequest(
   }
 
   const prompt = requireString(paramsRaw, "prompt", "params.prompt");
-  const images = resolveImages(paramsRaw.images, requestDir, MAX_VIDEO_REFS, "video");
+  const references = resolveVideoReferences(paramsRaw, requestDir);
 
   const request: VideoRequest = {
     type: "video",
     params: {
       prompt,
-      ...(images ? { images } : {}),
+      ...(references ? { references } : {}),
     },
   };
 
@@ -150,9 +256,6 @@ function parseVideoRequest(
   }
   if (typeof paramsRaw.seed === "number" || paramsRaw.seed === null) {
     request.params.seed = paramsRaw.seed;
-  }
-  if (typeof paramsRaw.task === "string") {
-    request.params.task = paramsRaw.task as VideoRequest["params"]["task"];
   }
 
   return request;

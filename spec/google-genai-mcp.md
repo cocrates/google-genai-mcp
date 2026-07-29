@@ -107,7 +107,7 @@ Google Gemini API의 Image / Video / Speech(TTS) / Music 생성 기능을 MCP �
 - MCP: `generate` — **단일 요청 파일**, 응답 `{ interactionId, files, background }`. YAML `type` 자동 분기
 - MCP: `download` / `get_interaction` / `continue_interaction` / `list_interactions` / `sync_interactions` / `cancel_interaction` / `delete_interaction`
 - **상대 경로 기준 (YAML에 명시된 경로):** 요청 YAML/JSON 파일이 있는 디렉터리 (`dirname(requestFile)`)
-  - `params.images[].path`, `output`, `download`의 상대 `filePath` 모두 동일 기준
+  - `params.images[].path`, `params.references[].path`, `output`, `download`의 상대 `filePath` 모두 동일 기준
 - 상세 스키마는 아래 "Image/Video/Speech/Music 요청 파일 스키마" 참조
 
 ### API 이중 체계 (ASR-014)
@@ -316,7 +316,7 @@ Google Gemini API의 Image / Video / Speech(TTS) / Music 생성 기능을 MCP �
 
 ### 경로 해석
 
-- 요청 파일 내 상대 경로(`params.images[].path`, `output`)는 **해당 요청 파일의 디렉터리**를 기준으로 해석한다
+- 요청 파일 내 상대 경로(`params.images[].path`, `params.references[].path`, `output`)는 **해당 요청 파일의 디렉터리**를 기준으로 해석한다
 - 예: `/proj/reqs/gen.yaml`의 `images[].path: "./refs/a.jpg"` → `/proj/reqs/refs/a.jpg`
 - `download`의 상대 `filePath`도 동일하게, 해당 interaction의 `requestFile` 디렉터리 기준 (없으면 CLI=CWD / MCP=workspace)
 - **`output` 미지정 시 자동 파일명** 저장 위치: CLI = **CWD**, MCP = **workspace** (`process.cwd()`)
@@ -393,12 +393,16 @@ params:
   prompt: |
     A woman wearing a blue floral dress
     walks through a sunlit garden.
-  images:
-    - path: "./references/dress.jpg"
+  references:
+    - path: "./references/dress.jpg"    # type inferred from extension
     - path: "./references/woman.png"
+      type: image
+    # - path: "./references/clip.mp4"
+    #   type: video
+    # - path: "./references/motif.wav"
+    #   type: audio
   durationSeconds: 8
   aspectRatio: "16:9"
-  task: reference_to_video   # optional; inferred from images when omitted
   seed: null
 
 output: "./output/result.mp4"
@@ -411,12 +415,13 @@ output: "./output/result.mp4"
 | `type` | ✅ | `"video"` | — | `"video"` |
 | `model` | ❌ | string | `"gemini-omni-flash-preview"` | Omni Flash (`gemini-omni-flash-preview`) |
 | `params.prompt` | ✅ | multi-line string | — | 장면·카메라·조명 등 상세 기술 |
-| `params.images` | ❌ | array | `[]` | 참조 이미지 (최대 10) |
-| `params.images[].path` | ✅ | string | — | 이미지 파일 경로 (요청 파일 디렉터리 기준) |
+| `params.references` | ❌ | array | `[]` | 멀티모달 참조 (최대 10). `image` / `video` / `audio` |
+| `params.references[].path` | ✅ | string | — | 미디어 파일 경로 (요청 파일 디렉터리 기준) |
+| `params.references[].type` | ❌ | enum | 확장자로 추론 | `image`, `video`, `audio` |
+| `params.images` | ❌ | array | — | **레거시.** 이미지 전용; 파싱 시 `references`(`type: image`)로 매핑. `references`와 동시 사용 불가 |
 | `params.durationSeconds` | ❌ | number | 모델 기본 | `response_format.duration`로 `"Ns"` 전달 |
 | `params.resolution` | ❌ | string | — | 파싱만 함 (Omni video_config에 resolution 필드 없음) |
 | `params.aspectRatio` | ❌ | string | `"16:9"` | `"16:9"`, `"9:16"` |
-| `params.task` | ❌ | enum | 이미지 수로 추론 | `text_to_video`, `image_to_video`, `reference_to_video`, `edit` |
 | `params.seed` | ❌ | int \| null | `null` | 재현성 시드 |
 | `background` | ❌ | boolean | `false` | 공통 파라미터 참조 |
 | `output` | ❌ | string | 자동 생성 | 출력 파일 경로 (.mp4, 요청 파일 디렉터리 기준) |
@@ -426,7 +431,13 @@ output: "./output/result.mp4"
 - Video 기본은 **동기** (`background=false`). 장시간이면 YAML에서 `background=true` 후 `download`로 저장
 - `delivery=uri`로 요청 (대용량 대비). 이후 get/download는 inline/uri 모두 처리
 - Conversational editing: `continue_interaction` / 인터랙티브 이어가기로 이전 영상을 자연어 수정 (`previous_interaction_id`)
-- `task` 미지정 시: 이미지 0→`text_to_video`, 1→`image_to_video`, 2+→`reference_to_video`
+- **`params.task`는 YAML에 두지 않는다.** API `video_config.task`는 참조만으로 추론한다:
+  - 참조 0 → `text_to_video`
+  - 이미지 1장만 → `image_to_video`
+  - 이미지 2장+ 또는 video/audio 포함 → `reference_to_video`
+  - 멀티턴 수정은 `continue_interaction` (YAML `task: edit` 없음)
+- YAML에 `task`가 있어도 파싱·전송하지 않음
+- **API 제한 (Omni preview):** 오디오 참조 업로드는 현재 미지원일 수 있음. 짧은 video 참조·복수 video 참조는 품질이 떨어질 수 있음 (Google 문서 Limitations)
 
 ### Speech 요청 (TTS)
 
@@ -728,8 +739,8 @@ Use the following lyrics and section tags:
 - YAML/JSON 파일 파싱 및 검증
 - 필수 필드 누락 시 명확한 오류 메시지
 - 상대 경로는 **요청 파일 디렉터리** 기준으로 해석
-- `images[].path`로 지정된 파일 존재 여부 검증
-- 모델별 참조 이미지 수 제한 검증 (Image: 19개, Video: 3개)
+- `images[].path` / `references[].path`로 지정된 파일 존재 여부 검증
+- 모델별 참조 수 제한 검증 (Image: 19개, Video references: 10개)
 
 ### 장문 Speech 처리
 - 낭독 본문이 4,000 bytes(UTF-8) 이하면 단일 API 요청으로 처리 (기존 동작 유지)

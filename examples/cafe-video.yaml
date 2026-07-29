@@ -14,11 +14,11 @@ params:
     Smooth, subtle handheld camera drift at eye level, maintaining a medium shot.
     Sound design: soft lo-fi jazz cafe music in the background, distant clinking of cups, muffled ambient chatter.
     No dialogue.
-  images:
+  references:
     - path: "./output/kwon-su-a-cafe.png"
+      type: image
   durationSeconds: 8
   aspectRatio: "16:9"
-  task: image_to_video
   seed: null
 
 output: "./output/cafe-video.mp4"
