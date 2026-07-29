@@ -2,14 +2,15 @@
 
 ## Requirement
 
-Google Gemini API의 Image / Video / Speech(TTS) / Music 생성 기능을 MCP 서버와 CLI로 제공하여, AI 에이전트와 개발자가 YAML 요청 파일로 손쉽게 멀티미디어를 생성할 수 있는 단일 TypeScript 패키지.
+Google Gemini API의 Image / Video / Speech(TTS) / Music **생성**과 image / audio / video **이해(분석)** 기능을 MCP 서버와 CLI로 제공하여, AI 에이전트와 개발자가 멀티미디어를 생성·분석·관리할 수 있는 단일 TypeScript 패키지.
 
 ## Context
 
 - Gemini API는 Nano Banana (Image), Gemini Omni Flash (Video), Gemini TTS (Speech), Lyria 3 (Music)를 통해 고품질 멀티미디어 생성 지원
+- Gemini 멀티모달 모델은 image/audio/video 입력으로 설명·QA·평가 등 **텍스트 이해** 지원 (Interactions API)
 - Interactions API(GA, 2026-06~)가 서버 측 상태 관리, 백그라운드 실행, 대화 이력 유지 제공
 - MCP(Model Context Protocol)를 통해 에이전트(OpenCode, Claude Desktop 등)가 도구로 직접 호출 가능
-- YAML 파일 기반 입력으로 복잡한 생성 파라미터를 선언적으로 관리
+- 생성은 YAML 파일 기반, 분석은 MCP 인자 / CLI positional files + prompt
 - PRD: `spec/PRD.md`
 
 ## Decisions
@@ -19,12 +20,19 @@ Google Gemini API의 Image / Video / Speech(TTS) / Music 생성 기능을 MCP �
 - 네트워크 포트 미사용, 프로세스 생명주기는 MCP 클라이언트가 관리
 - 향후 HTTP/SSE 확장 가능 (환경변수로 전환)
 
-### CLI 포함 (ASR-002)
+### CLI 포함 (ASR-002, ASR-028)
 - CLI + MCP 둘 다 제공
 - **Multi-Bin 구조** — MCP와 CLI를 별도 진입점으로 분리
-- CLI: `gemini <files...>` 파일 기반 단일 명령어 + `gemini` 인터랙티브 모드 (멀티 파일·glob OK)
+- CLI 형태: **`gemini <command> <parameters>`**; **명령 없으면** 인터랙티브
+- **인라인 명령:** `generate`, `analyze`, `download`, `list`, `show`, `status`, `sync`, `cancel`, `delete`, `help`
+- **`gemini <files>` bare 진입 제거** — 생성은 `gemini generate <files…>` 만
+- **인라인 `continue` 없음** — 후속 턴은 인터랙티브(`/select` + 텍스트)만
+- 인라인 관리 명령의 대상은 **`interactionId`** (index 아님). 인터랙티브 `/select N`은 유지
+- **Global flags 공통:** `--verbose`, `--force` 등 모든 커맨드에 공통 파싱
+- **`help` ↔ MCP 정합:** CLI help 문구와 대응 MCP tool description의 의미·제약을 맞춘다
 - MCP: `generate` — **요청 파일 1개만** (`filePath`). 여러 건은 클라이언트가 다중/병렬 호출
 - MCP: `generate` 응답: **`interactionId` + `files`** (동기면 저장 경로 포함, 비동기는 `files: []`)
+- MCP: `analyze` — `inputs` + `prompt` (+ 선택 `model`) → `{ interactionId, text }`
 - MCP: `download` / `get_interaction` / `continue_interaction` / `list_interactions` / `sync_interactions`
 - MCP: `cancel_interaction` / `delete_interaction`
 
@@ -45,9 +53,9 @@ Google Gemini API의 Image / Video / Speech(TTS) / Music 생성 기능을 MCP �
   3. 결과 타입 통일 (`GeneratedFile` 등 공유 타입)
   4. MCP tool은 `core/`를 호출만 (입력 변환 → core 호출 → MCP 응답 포맷팅)
 
-### MVP 기능 범위 (ASR-004)
-- **In Scope:** Image (Nano Banana), Video (Gemini Omni Flash), Speech (Gemini TTS), Music (Lyria 3)
-- **Out of Scope:** 텍스트 생성, 코드 생성, 임베딩, 멀티모달 분석, HTTP(SSE) 전송
+### MVP 기능 범위 (ASR-004, ASR-023)
+- **In Scope:** Image / Video / Speech / Music **생성**; image / audio / video **이해(분석)** (`analyze`)
+- **Out of Scope:** 범용 텍스트/코드 생성, 임베딩, HTTP(SSE) 전송
 
 ### Gemini API 클라이언트 생명주기 (ASR-005)
 - **싱글톤** — 애플리케이션 시작 시 1회 생성, 전역 공유
@@ -101,14 +109,14 @@ Google Gemini API의 Image / Video / Speech(TTS) / Music 생성 기능을 MCP �
 - Gemini SDK 응답은 내부 변환 레이어를 통해 MCP 타입으로 변환
 
 ### 파일 기반 입력 지원 (ASR-013)
-- CLI는 파일 기반만 지원 — `gemini <file1> <file2> ...`
-- 인라인 파라미터 미지원, 모든 파라미터는 YAML/JSON 파일에 기술
-- glob 패턴 지원 (`gemini aa/*.yaml bb/*.yaml`)
+- **생성:** CLI `gemini generate <files…>` — YAML/JSON, 멀티 파일·glob. 인라인 생성 파라미터 미지원
+- **분석:** YAML 불필요. CLI `gemini analyze <files…>`; MCP `inputs`+`prompt` (아래 Analyze)
 - MCP: `generate` — **단일 요청 파일**, 응답 `{ interactionId, files, background }`. YAML `type` 자동 분기
-- MCP: `download` / `get_interaction` / `continue_interaction` / `list_interactions` / `sync_interactions` / `cancel_interaction` / `delete_interaction`
+- MCP: `analyze` / `download` / `get_interaction` / `continue_interaction` / `list_interactions` / `sync_interactions` / `cancel_interaction` / `delete_interaction`
 - **상대 경로 기준 (YAML에 명시된 경로):** 요청 YAML/JSON 파일이 있는 디렉터리 (`dirname(requestFile)`)
   - `params.images[].path`, `params.references[].path`, `output`, `download`의 상대 `filePath` 모두 동일 기준
-- 상세 스키마는 아래 "Image/Video/Speech/Music 요청 파일 스키마" 참조
+- CLI `analyze`의 상대 미디어 경로: **프로세스 CWD** 기준
+- 상세 스키마는 아래 "Image/Video/Speech/Music 요청 파일 스키마" 및 "Analyze" 참조
 
 ### API 이중 체계 (ASR-014)
 - 기본 Interactions API 사용 (단일 생성)
@@ -199,35 +207,66 @@ Google Gemini API의 Image / Video / Speech(TTS) / Music 생성 기능을 MCP �
 ### `type: audio` 폐기
 - 기존 `audio`는 TTS만을 의미했음 → **`speech`로 이전**. 파서는 `audio` 입력 시 오류로 `speech` 안내
 
-### Interaction 메타데이터 관리 (ASR-019)
+### Interaction 메타데이터 관리 (ASR-019, ASR-026)
 - `{dataDir}/interactions.json`에 최소한의 매핑 정보 저장
 - 서버 메타데이터(타입, 프롬프트, 상태 등)는 중복 저장하지 않음 — 목록은 로컬 기반, 상태는 get(id)로 확인
-- 로컬 저장 정보: `interactionId`, `requestFile`(원본 yaml 절대 경로), `tmpFile`(복사본 파일명)
-- YAML 요청 파일은 `{dataDir}/tmp/{hash}.yaml`로 복사하여 보관 (사용자 참고용)
+- 로컬 저장 정보: `interactionId`, `requestFile`(원본 yaml 절대 경로; **analyze는 없을 수 있음**), `tmpFile`(복사본 파일명; analyze는 생략 가능)
+- YAML 요청 파일은 `{dataDir}/tmp/{hash}.yaml`로 복사하여 보관 (생성 요청; 사용자 참고용)
+- analyze로 생성된 interaction도 동일 store에 등록하여 `/list`·`continue_interaction`에 노출
 - **서버 동기화:**
-  - `sync_interactions` / `/sync`: 로컬 목록의 각 ID를 서버에서 조회, 서버에 없으면 로컬 매핑(및 관련 tmp) 삭제
+  - `sync_interactions` / `/sync` / `gemini sync`: 로컬 목록의 각 ID를 서버에서 조회, 서버에 없으면 로컬 매핑(및 관련 tmp) 삭제
   - `get_interaction`: 서버에 해당 ID가 없으면 로컬 매핑을 삭제하고 not-found 응답
 
 ### 인터랙티브 세션 관리 (ASR-020)
-- `gemini` 파라미터 없이 실행 시 인터랙티브 세션 시작
+- `gemini` **명령 없이** 실행 시 인터랙티브 세션 시작
 - 명령어: `/help`, `/list`, `/select N`, `/show`, `/status`, `/download [path]`, `/sync`, `/cancel`, `/delete [indexes...]`, `/quit`
 - 시작 시 가장 최근 interaction(가장 큰 index) 자동 선택. 목록은 **최신순**(높은 index 먼저). index는 1부터 단조 증가하며 변경되지 않음
-- `/list`는 로컬 데이터만 (서버 get 없음). index·prev index·requestFile 표시
+- `/list`는 로컬 데이터만 (서버 get 없음). index·prev index·requestFile 표시 (`requestFile` 없으면 표시 생략 또는 `-`)
 - `/select` / `/show` / `/status`에서 서버 get_interaction 결과 표시 (사용자에게는 index 중심, interactionId 숨김)
-- 텍스트 continue 후 새 interaction을 자동 선택하고 세션 유지
+- 텍스트 continue 후 새 interaction을 자동 선택하고 세션 유지 — **생성·분석 interaction 모두** 동일
 - `/delete`는 `/delete 0 1`처럼 복수 index, 인자 없으면 selected 삭제
-- `/help` / `/help <cmd>` 도움말
+- `/help` / `/help <cmd>` 도움말 (인라인 `gemini help`와 MCP tool 설명 정합)
 - `/download`는 MCP `download`와 동일 규칙
 - `/sync`는 로컬↔서버 매핑 정리
 - `/cancel`은 selected 취소
 
-### Multi-turn 편집 (ASR-021)
+### Multi-turn 편집 (ASR-021, ASR-026)
 - Interactions API `previous_interaction_id` 활용
 - 사용자가 `/select N`으로 interaction 선택 후 텍스트 입력
 - 서버에 `previous_interaction_id`와 새 텍스트만 전송 — 원본 파라미터 재전송 불필요
 - 서버가 이전 컨텍스트를 유지하면서 새 요청 처리
 - 새 interaction이 생성되면 로컬 interactions.json에 매핑 추가
-- **모달리티 제한 없음** — image/video/speech/music 모두 허용. 미지원 시 API 오류 전달
+- **모달리티 제한 없음** — image/video/speech/music **및 analyze** 모두 허용. 미지원 시 API 오류 전달
+- CLI **인라인 `continue` 명령 없음** — 후속은 인터랙티브만. MCP는 `continue_interaction` 유지
+
+### 미디어 이해 Analyze (ASR-023 … ASR-027)
+
+**표면 (ASR-024, ASR-027)**
+- MCP: `analyze({ inputs: string[], prompt: string, model?: string })` → `{ interactionId, text }`
+- CLI: `gemini analyze <files…> [-p|--prompt …] [-m|--model …]`
+- YAML `type: analyze` 없음. 출력 형식·후처리는 **prompt에 명시**하고 서버측 `responseSchema`는 MVP 미포함
+- `inputs` / CLI files: 길이 1–10. 단일도 배열(MCP) / 복수 positional(CLI)
+
+**기본 모델 (ASR-026)**
+- 기본: `gemini-3.5-flash`. `model` 인자로 오버라이드
+- `media_resolution` MVP 미노출
+
+**입력·업로드 (ASR-025)**
+- `inputs` 항목 해석 순서:
+  1. YouTube (`youtube.com` / `youtu.be`) → Interactions `type: video`, `uri` 패스스루
+  2. 기타 `http(s)://` → `uri` 패스스루; 타입은 URL path 확장자로 추론, 실패 시 입력 오류
+  3. 그 외 → 로컬 경로(존재·가독성 검사). CLI 상대 경로는 CWD 기준
+- 로컬 파일: **파일당 ≤20MB** → 인라인 base64; **초과** → Files API 업로드 후 `ACTIVE`까지 폴링(간격 5초) → `uri` 사용
+- MIME/타입: 기존 `inferMediaRefType` 및 확장자→MIME 맵 재사용. 추론 실패 시 즉시 입력 오류
+- GCS 등록·비공개 URL 대행 없음
+
+**prompt (CLI)**
+- `-p`/`--prompt`가 있으면 사용. 없으면 stdin을 EOF까지 읽음
+- trim 후 빈 문자열이면 **취소**(exit code 입력 오류). 대화형 한 줄 프롬프트 없음
+
+**Interaction**
+- 응답에 `interactionId` 포함. `continue_interaction` / 인터랙티브 이어가기 가능
+- 로컬 store에 매핑 등록 (`requestFile` 없을 수 있음)
 ---
 
 ## 로컬 저장 구조
@@ -638,20 +677,26 @@ Use the following lyrics and section tags:
   - `background=true`(비동기): 즉시 반환 — 산출물은 `download`로 저장
   - 선택 파라미터 `background`: YAML에 `background`가 없을 때만 타입 기본값을 덮어씀
   - 출력 파일 존재 시 **overwrite**
+- `analyze` tool: 미디어 이해(분석)
+  - 입력: `inputs` (string[], 길이 1–10, 필수), `prompt` (string, 필수, 비어 있으면 입력 오류), `model` (string, 선택, 기본 `gemini-3.5-flash`)
+  - `inputs` 항목: 로컬 경로 / 공개 http(s) URL / YouTube URL (업로드·해석 규칙은 Decisions «미디어 이해 Analyze»)
+  - **응답:** `{ interactionId, text }`
+  - 로컬 interactions store에 매핑 등록
 - `download` tool: 완료된 interaction 산출물을 로컬에 저장
   - 입력: `interactionId` (필수), `filePath` (선택)
   - `filePath` 미지정 시: YAML `output` → 없으면 자동 파일명 (저장 위치: workspace)
-  - 상대 `filePath`는 해당 interaction의 `requestFile` 디렉터리 기준
+  - 상대 `filePath`는 해당 interaction의 `requestFile` 디렉터리 기준 (`requestFile` 없으면 workspace)
   - 출력: 저장된 로컬 파일 경로 (`files`)
   - **미완료·실패·없음 등 오류 시 즉시 에러** (대기·폴링 없음)
   - 대상 파일 존재 시 **overwrite**
 - `get_interaction` tool: `interactionId`로 상태 조회. **필수 응답 필드**는 아래 스키마. 서버에 없으면 로컬 매핑 삭제 후 not-found
-- `continue_interaction` tool: `interactionId` + 텍스트로 이어가기. image/video/speech/music **모달리티 제한 없음** (미지원 시 API 오류 전달)
+- `continue_interaction` tool: `interactionId` + 텍스트로 이어가기. image/video/speech/music/**analyze** **모달리티 제한 없음** (미지원 시 API 오류 전달)
 - `list_interactions` tool: 로컬 interactions.json 기반 목록. 각 항목 상태는 서버 get(id)로 확인
 - `sync_interactions` tool: 로컬 목록을 서버와 맞춤 — 서버에 없는 ID는 로컬(및 tmp)에서 제거. 결과: 유지/삭제 건수
 - `cancel_interaction` tool: `interactionId`로 서버 실행 취소 (`interactions.cancel`)
 - `delete_interaction` tool: `interactionId`로 서버 삭제 (`interactions.delete`) + 로컬 매핑/tmp 제거
 - 오류 시 tool error 응답 반환
+- tool description 문구는 CLI `help`와 의미·제약을 정합
 
 ### `get_interaction` 응답 스키마 (필수)
 
@@ -699,32 +744,52 @@ Use the following lyrics and section tags:
 }
 ```
 
+### `analyze` 응답 스키마
+
+```jsonc
+{
+  "interactionId": "abc123",
+  "text": "…"                           // 모델 output_text
+}
+```
+
 ### CLI
-- `gemini <files...>` 명령어로 YAML 파일 기반 생성 (여러 파일 지원, glob 패턴 지원)
-- `gemini` 파라미터 없이 실행 시 인터랙티브 세션 시작
-- `--verbose` 옵션으로 로그 활성화
-- `--force` 옵션: 출력 파일 덮어쓰기 시 확인 생략
+- 형태: **`gemini <command> [args…] [global flags]`**. 명령 없으면 인터랙티브
+- **Global flags (공통):** `--verbose` (로그), `--force` (덮어쓰기 확인 생략) — 모든 커맨드에 적용
+- **명령:**
+  - `generate <files…>` — YAML/JSON 생성 (멀티·glob). bare `gemini <files>` **불가**
+  - `analyze <files…> [-p|--prompt …] [-m|--model …]` — 미디어 분석. files→`inputs`. `-p` 없으면 stdin; trim 후 빈 prompt면 **취소**(exit 2)
+  - `download <interactionId> [outputPath]`
+  - `list`
+  - `show <interactionId>`
+  - `status <interactionId>`
+  - `sync`
+  - `cancel <interactionId>`
+  - `delete <interactionId…>`
+  - `help [command]` — MCP tool description과 정합
+- **인라인 `continue` 없음** — 후속은 인터랙티브
 - `background`는 YAML(또는 타입 기본값)을 따름 — CLI `--background` 플래그 없음
 - 자동 파일명 저장 위치: **CWD**
 - 출력 파일 존재 시: TTY면 확인 프롬프트, 비대화형이면 실패 (`--force`로 덮어쓰기)
 - 생성 중 progress 표시 (Video·비동기 대기 시 poll 간격 10초). **시간 상한 없음** — Ctrl-C로 중단
+- Files API ACTIVE 폴링(analyze 대용량): 간격 5초
 - 비동기 완료 후 산출물 저장은 `download`와 동일한 core 로직 사용
 - exit code로 결과 상태 전달 (0:성공, 1:일반, 2:입력, 3:인증, 4:API)
 
 ### 인터랙티브 모드
-- `gemini` 실행 시 인터랙티브 세션 시작 (가장 큰 index 자동 선택)
+- `gemini` **무명령** 실행 시 인터랙티브 세션 시작 (가장 큰 index 자동 선택)
 - 명령어:
-  - `/help` / `/help <cmd>` — 도움말
+  - `/help` / `/help <cmd>` — 도움말 (`gemini help`·MCP와 정합)
   - `/list` — 로컬만, 최신순. `* [index] prev=[n] file`
-  - `/select N` — 선택 + 서버 상태 요약
-  - `/show` — 서버 상세(index 중심, interactionId 숨김) + 요청 YAML
+  - `/select N` — 선택 + 서버 상태 요약 (**유지**)
+  - `/show` — 서버 상세(index 중심, interactionId 숨김) + 요청 YAML(있으면)
   - `/status` — 서버 상세
   - `/download [path]` — 산출물 저장
   - `/sync` — 로컬↔서버 매핑 동기화
   - `/cancel` — selected 취소
   - `/delete [indexes...]` — 복수 index 삭제, 생략 시 selected
   - `/quit` — 종료
-- 텍스트 입력 시 continue 후 **새 턴을 자동 선택**하고 세션 유지
+- 텍스트 입력 시 continue 후 **새 턴을 자동 선택**하고 세션 유지 (생성·analyze interaction 공통)
 
 ### Interaction 관리
 - `{dataDir}/interactions.json` — interactionId ↔ 파일 경로 매핑
@@ -786,10 +851,9 @@ Use the following lyrics and section tags:
 
 ## Out of Scope
 
-- 텍스트 생성 (`generate_text`)
+- 텍스트 생성 (`generate_text`) — 범용 챗; 미디어 이해(`analyze`)는 In Scope
 - 코드 생성 (`generate_code`)
 - 임베딩 (`get_embedding`)
-- 멀티모달 분석 (`analyze_image/video`)
 - HTTP(SSE) 전송
 - Batch API 지원
 - Video 확장/보간 (`video`, `lastFrame` 파라미터)
@@ -797,10 +861,14 @@ Use the following lyrics and section tags:
 - `negativePrompt` 파라미터 (MVP)
 - Google Search grounding (Nano Banana Pro 기능)
 - CLI `--background` 플래그 (YAML/`background` MCP 파라미터로만 오버라이드)
+- CLI bare `gemini <files>` (반드시 `gemini generate <files…>`)
+- CLI 인라인 `continue` 명령
+- analyze YAML (`type: analyze`), 서버측 `responseSchema`, `media_resolution` 파라미터 노출
 - continue_interaction의 모달리티별 사전 차단 (서버 오류에 위임)
+
 ## Open Questions
 
-- 없음 (2026-07-23: CLI 대기 무제한+Ctrl-C, MCP generate 단일 파일·ID+files, download 즉시 에러, 음성 30종, dataDir=홈 기준 OS별, PRD 동기화)
+- 없음 (2026-07-29: analyze 통합·CLI `gemini <command>`·스펙 동기화)
 
 ## Related
 
@@ -809,6 +877,12 @@ Use the following lyrics and section tags:
 - `adr/gemini-client-lifecycle.md` — 싱글톤 클라이언트 결정 (approved)
 - `adr/speech-long-form-chunking.md` — 장문 Speech 분할 방식 결정 (approved)
 - `adr/speech-chunk-failure-recovery.md` — 청크 실패 재시도·resume 결정 (approved)
+- `adr/media-understanding-mcp.md` — 통합 analyze (approved)
+- `adr/analyze-request-response-schema.md` — inputs+prompt→text (approved)
+- `adr/analyze-input-upload-strategy.md` — 하이브리드 업로드 (approved)
+- `adr/analyze-interaction-and-model.md` — interactionId·gemini-3.5-flash (approved)
+- `adr/analyze-cli-surface.md` — analyze CLI (approved)
+- `adr/cli-unified-command-surface.md` — CLI 통합 커맨드 (approved)
 
 ## Tags
-`mcp`, `gemini-api`, `image-generation`, `video-generation`, `speech-generation`, `music-generation`, `tts`, `lyria`, `yaml`, `cli`, `interactive-mode`, `multi-turn`, `interactions-api`, `download`, `sync`, `cancel`, `delete`, `long-form-chunking`, `wav-concat`, `chunk-cache`
+`mcp`, `gemini-api`, `image-generation`, `video-generation`, `speech-generation`, `music-generation`, `media-understanding`, `analyze`, `tts`, `lyria`, `yaml`, `cli`, `interactive-mode`, `multi-turn`, `interactions-api`, `download`, `sync`, `cancel`, `delete`, `long-form-chunking`, `wav-concat`, `chunk-cache`, `files-api`

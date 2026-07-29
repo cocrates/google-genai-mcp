@@ -7,7 +7,7 @@ Living registry for google-genai-mcp. Status of each ASR must stay current.
 | ID | Title | Category | Status | Related ADRs | Spec |
 |----|-------|----------|--------|--------------|------|
 | ASR-001 | MCP 전송 방식 | Integration & dependencies | approved | adr/mcp-transport.md | spec/google-genai-mcp.md — Decisions |
-| ASR-002 | CLI 구조 및 인터랙티브 모드 | Deliverable form | approved | adr/cli-mcp-entry-point.md | spec/google-genai-mcp.md — Decisions, Requirements |
+| ASR-002 | CLI 구조 및 인터랙티브 모드 | Deliverable form | approved | adr/cli-mcp-entry-point.md, adr/cli-unified-command-surface.md | spec/google-genai-mcp.md — Decisions, Requirements |
 | ASR-003 | 패키징 구조 | Structure & organization | approved | — | spec/google-genai-mcp.md — Constraints |
 | ASR-004 | MVP 기능 범위 | Scope boundary | approved | — | spec/google-genai-mcp.md — Decisions, Out of Scope |
 | ASR-005 | Gemini API 클라이언트 통합 방식 | Integration & dependencies | approved | adr/gemini-client-lifecycle.md | spec/google-genai-mcp.md — Decisions |
@@ -28,6 +28,12 @@ Living registry for google-genai-mcp. Status of each ASR must stay current.
 | ASR-017 | 백그라운드 실행 모드 | Structure & organization | approved | — | spec/google-genai-mcp.md — Decisions |
 | ASR-018 | Audio(TTS) 생성 지원 | Scope boundary | approved | adr/speech-long-form-chunking.md (approved) | spec/google-genai-mcp.md — Audio 스키마, Requirements |
 | ASR-022 | 장문 Speech 분할·병합 전략 | Structure & organization | approved | adr/speech-long-form-chunking.md, adr/speech-chunk-failure-recovery.md | spec/google-genai-mcp.md — 장문 Speech 분할·병합, 장문 Speech 처리 |
+| ASR-023 | 미디어 이해(분석) MCP 기능 | Scope boundary | approved | adr/media-understanding-mcp.md | spec/google-genai-mcp.md — Analyze |
+| ASR-024 | Analyze 요청·응답 스키마 | Deliverable form | approved | adr/analyze-request-response-schema.md | spec/google-genai-mcp.md — Analyze, Requirements |
+| ASR-025 | Analyze 입력·업로드 전략 | Integration & dependencies | approved | adr/analyze-input-upload-strategy.md | spec/google-genai-mcp.md — Analyze |
+| ASR-026 | Analyze interaction·모델 기본값 | Structure & organization | approved | adr/analyze-interaction-and-model.md | spec/google-genai-mcp.md — Analyze |
+| ASR-027 | Analyze CLI 표면 | Deliverable form | approved | adr/analyze-cli-surface.md, adr/cli-unified-command-surface.md | spec/google-genai-mcp.md — CLI |
+| ASR-028 | CLI 통합 커맨드 표면 | Deliverable form | approved | adr/cli-unified-command-surface.md | spec/google-genai-mcp.md — CLI, Decisions |
 
 ## Dependency Order (recommended review path)
 
@@ -53,6 +59,12 @@ Living registry for google-genai-mcp. Status of each ASR must stay current.
 20. ASR-009 (테스트 전략)
 21. ASR-018 (Audio(TTS) 생성 지원)
 22. ASR-022 (장문 Speech 분할·병합 전략)
+23. ASR-023 (미디어 이해(분석) MCP 기능)
+24. ASR-024 (Analyze 요청·응답 스키마)
+25. ASR-025 (Analyze 입력·업로드 전략)
+26. ASR-026 (Analyze interaction·모델 기본값)
+27. ASR-027 (Analyze CLI 표면)
+28. ASR-028 (CLI 통합 커맨드 표면)
 
 ## ASR Detail
 
@@ -79,14 +91,13 @@ Living registry for google-genai-mcp. Status of each ASR must stay current.
 - **Depends on:** ASR-001
 - **Related ADRs:**
   - `adr/cli-mcp-entry-point.md` — approved — CLI/MCP Entry Point 구조 (Multi-Bin 채택)
-- **Resolution path:** direct-input
-- **Resolution:** 파일 기반 단일 명령어 + 인터랙티브 모드. `gemini <files...>`로 YAML 파일 기반 생성, `gemini`로 인터랙티브 세션 시작. 서브커맨드(`image`, `video`, `audio`) 제거 — YAML 파일의 `type` 필드로 분기. 멀티 파일 glob 지원 (`gemini aa/*.yaml bb/*.yaml`).
-- **Spec:** `spec/google-genai-mcp.md` — Decisions, Requirements
+  - `adr/cli-unified-command-surface.md` — approved — `gemini <command> <params>` 통합 (ASR-028)
+- **Resolution path:** adr
+- **Resolution:** `gemini <command> <parameters>`; 명령 없음 → 인터랙티브. `generate`/`analyze`/`download`/`list`/`show`/`status`/`sync`/`cancel`/`delete`/`help`. bare `gemini <files>` 제거. 인라인 continue 없음(후속은 인터랙티브 `/select`+텍스트). 인라인 대상은 interactionId. global flags 공통. help↔MCP 정합. (구: 파일만으로 생성.)
+- **Spec:** `spec/google-genai-mcp.md` — Decisions, Requirements (개정 예정)
 - **Notes:**
-  - MCP: `generate`(단일 파일, 응답 ID+files) / `download` / interaction 관리 도구
-  - MCP: `sync_interactions` / `cancel_interaction` / `delete_interaction`
-  - GUI/Web UI 확장 고려 — core/ 모듈이 비즈니스 로직 담당, CLI는 UI 계층만 담당
-
+  - MCP: `generate` / `analyze` / `download` / interaction 관리 도구
+  - 2026-07-29: ASR-028 Option A 승인으로 서브커맨드 통합 개정
 ### ASR-003 — 패키징 구조
 
 - **Category:** Structure & organization
@@ -107,11 +118,12 @@ Living registry for google-genai-mcp. Status of each ASR must stay current.
 - **Statement:** MVP에 포함할 Gemini API 기능 결정
 - **Why it matters:** 개발 범위와 출시 일정에 직접 영향
 - **Depends on:** ASR-001
-- **Related ADRs:** 없음 (Direct Input)
+- **Related ADRs:**
+  - `adr/media-understanding-mcp.md` — approved — 통합 `analyze`로 미디어 이해 추가 (ASR-023)
 - **Resolution path:** direct-input
-- **Resolution:** MVP 기능: Image 생성, Video 생성. 텍스트 생성, 코드 생성, 임베딩은 제외.
-- **Spec:** —
-- **Notes:** 사용자가 image, video 생성을 MVP로 선택
+- **Resolution:** MVP 기능: Image/Video/Speech/Music 생성 + 미디어 이해(`analyze`). 텍스트/코드 생성·임베딩·HTTP(SSE)는 제외.
+- **Spec:** `spec/google-genai-mcp.md` — Decisions MVP, Out of Scope
+- **Notes:** 사용자가 image, video 생성을 MVP로 선택. 후속 Speech/Music. 2026-07-29 ASR-023으로 analyze In Scope.
 
 ### ASR-005 — Gemini API 클라이언트 통합 방식
 
@@ -353,5 +365,90 @@ Living registry for google-genai-mcp. Status of each ASR must stay current.
 - **Resolution path:** adr
 - **Resolution:** 낭독 본문 4,000 bytes 초과 시 문단(빈 줄) 단위 분할, 1,500 bytes 초과 문단만 문장 단위 재분할. `#### TRANSCRIPT` 앞 프리앰블은 임계값 제외·전 청크 재부착. 청크 PCM을 그대로 이어붙여 단일 WAV(24kHz·16bit·mono)로 병합(청크 사이 무음 삽입 없음 — 각 청크가 이미 앞뒤 무음 포함, 2026-07-26 개정). 청크별 재시도(rate limit 3회, 5xx 2회); 인증·quota·400은 즉시 중단. 부분 wav 미저장, 무음 대체 금지. 성공 청크는 `{dataDir}/chunks/{requestHash}/{NNN}.pcm`에 캐시하여 재실행 시 자동 재사용, 성공 병합 시 삭제·실패분 7일 후 GC. 로직은 core에 두어 CLI·MCP 공통, `interactions.json`에는 대표 1건만 등록.
 - **Spec:** `spec/google-genai-mcp.md` — 장문 Speech 분할·병합 (ASR-022), Requirements 장문 Speech 처리
-- **Notes:** 2026-07-25 장문 생성 경험으로 제기. wav concat은 기술적으로 가능(L16→WAV 래핑 전제). 미결: 진행/실패 보고 문구 세부, 청크 간 동시성 상한.
+- **Notes:** 2026-07-25 장문 생성 요청으로 제기. wav concat은 기술적으로 가능(L16→WAV 래핑 전제). 미결: 진행/실패 보고 문구 세부, 청크 간 동시성 상한.
+
+### ASR-023 — 미디어 이해(분석) MCP 기능
+
+- **Category:** Scope boundary
+- **Status:** approved
+- **Statement:** Gemini image/audio/video 이해 API를 MCP/CLI로 노출할지, 어떤 도구·요청 형태(통합 analyze vs 모달리티별 vs QA 전용 vs 미추가)로 노출할지 결정해야 한다
+- **Why it matters:** 생성 산출물 QA와 사용자 미디어 설명/분석 요청을 에이전트가 닫힌 루프로 처리하려면 서버 측 미디어 입력이 필요함. 현재 PRD/스펙은 멀티모달 분석을 Out of Scope로 두고 있어 범위 개정이 전제됨
+- **Depends on:** ASR-004, ASR-005, ASR-013, ASR-014, ASR-006
+- **Related ADRs:**
+  - `adr/media-understanding-mcp.md` — approved — Option A: 통합 MCP `analyze` 도구 1개
+- **Resolution path:** adr
+- **Resolution:** Option A — 통합 `analyze`. ASR-024/025/026으로 스키마·업로드·interaction/모델 확정. 스펙·구현 핸드오프 가능.
+- **Spec:** `spec/google-genai-mcp.md` — 미디어 이해 Analyze, Requirements analyze
+- **Notes:** 2026-07-29 제기·승인. 사용 시나리오: (1) 생성 결과 적합성 평가 (2) 임의 미디어 설명·분석·평가 후 호스트 AI가 사용자에게 해석.
+
+### ASR-024 — Analyze 요청·응답 스키마
+
+- **Category:** Deliverable form
+- **Status:** approved
+- **Statement:** `analyze`의 MCP/CLI 입력·출력 계약(YAML 여부, `inputs`/`prompt`, 텍스트 반환, 구조화 출력 파라미터)을 결정해야 한다
+- **Why it matters:** generate와 달리 파라미터가 단순하고 출력 형식이 요청마다 다르므로, 잘못된 계약은 에이전트 호출 비용을 높이거나 스키마를 과다 설계하게 됨
+- **Depends on:** ASR-023, ASR-013, ASR-006
+- **Related ADRs:**
+  - `adr/analyze-request-response-schema.md` — approved — Option A: MCP 네이티브 `inputs`+`prompt`(+`model?`) → `{ interactionId, text }`, YAML 없음
+  - `adr/analyze-interaction-and-model.md` — approved — 응답에 `interactionId` 포함 확정
+- **Resolution path:** adr
+- **Resolution:** Option A — `analyze({ inputs: string[], prompt: string, model?: string })` → `{ interactionId, text }`. 단일도 `inputs` 배열(길이 ≥ 1). 출력 형식은 prompt에 명시. 서버측 `responseSchema`·필수 YAML은 MVP 제외.
+- **Spec:** `spec/google-genai-mcp.md` — Analyze 표면·응답 스키마
+- **Notes:** 2026-07-29 승인. interactionId는 ASR-026에서 확정·스키마 개정.
+
+### ASR-025 — Analyze 입력·업로드 전략
+
+- **Category:** Integration & dependencies
+- **Status:** approved
+- **Statement:** `analyze`의 `inputs[]`(로컬 경로·URL·YouTube)를 Interactions API에 인라인으로 넣을지 Files API로 올릴지, MIME 추론·개수 한도·ACTIVE 폴링을 어떻게 할지 결정해야 한다
+- **Why it matters:** 생성 video QA는 대용량 파일이 흔하고, 임의 분석은 URL/YouTube가 흔함. 잘못된 전략은 작은 파일 지연 또는 큰 파일 실패로 이어짐
+- **Depends on:** ASR-024, ASR-023, ASR-005, ASR-013
+- **Related ADRs:**
+  - `adr/analyze-input-upload-strategy.md` — approved — Option A: 하이브리드(≤20MB 인라인 / 초과 Files+ACTIVE) + URL/YouTube 패스스루
+- **Resolution path:** adr
+- **Resolution:** Option A — 로컬 ≤20MB 인라인, 초과 Files API+ACTIVE 폴링(5초). YouTube·공개 http(s)는 uri 패스스루. MIME=`inferMediaRefType`. inputs 1–10.
+- **Spec:** `spec/google-genai-mcp.md` — Analyze 입력·업로드
+- **Notes:** 2026-07-29 승인.
+
+### ASR-026 — Analyze interaction·모델 기본값
+
+- **Category:** Structure & organization
+- **Status:** approved
+- **Statement:** `analyze`가 `interactionId`를 반환하고 `continue_interaction`을 재사용할지, 기본 모델을 무엇으로 할지 결정해야 한다
+- **Why it matters:** 후속 질문 UX와 매 호출 비용·편의에 직접 영향
+- **Depends on:** ASR-024, ASR-021, ASR-019, ASR-023
+- **Related ADRs:**
+  - `adr/analyze-interaction-and-model.md` — approved — ID+continue 재사용, 기본 `gemini-3.5-flash`, 선택적 `model` 오버라이드
+- **Resolution path:** adr
+- **Resolution:** `analyze` → `{ interactionId, text }`; `continue_interaction`으로 follow-up. 로컬 interactions store에 매핑. 기본 모델 `gemini-3.5-flash`. `media_resolution` MVP 미노출.
+- **Spec:** `spec/google-genai-mcp.md` — Analyze interaction·모델
+- **Notes:** 2026-07-29 사용자 직접 승인.
+
+### ASR-027 — Analyze CLI 표면
+
+- **Category:** Deliverable form
+- **Status:** approved
+- **Statement:** CLI에서 analyze 호출 형태(서브커맨드/플래그)와 후속 interaction UX를 결정해야 한다
+- **Why it matters:** analyze는 YAML이 없어 생성 CLI와 진입점이 다르고, follow-up을 새로 만들면 UX가 이중화됨
+- **Depends on:** ASR-024, ASR-026, ASR-002, ASR-020, ASR-021
+- **Related ADRs:**
+  - `adr/analyze-cli-surface.md` — approved — `gemini analyze` 플래그; follow-up은 기존 인터랙티브+interactionId
+  - `adr/cli-unified-command-surface.md` — proposed — 전체 CLI `gemini <command>` 통합 시 analyze 위치 정합 (ASR-028)
+- **Resolution path:** adr
+- **Resolution:** `gemini analyze <files…> [-p …]`. prompt: `-p` 또는 stdin, 빈 값이면 취소. 후속은 인터랙티브 `/select`+텍스트(인라인 continue 없음). ASR-028 정합.
+- **Spec:** `spec/google-genai-mcp.md` — CLI analyze
+- **Notes:** 2026-07-29 승인. ASR-028에서 bare files 제거·CLI 통합과 함께 확정.
+### ASR-028 — CLI 통합 커맨드 표면
+
+- **Category:** Deliverable form
+- **Status:** approved
+- **Statement:** CLI를 `gemini <command> <parameters>`로 통일하고, 인터랙티브와 동등한 관리 명령을 인라인으로 제공하며, 대상 지정은 `select` index 대신 `interactionId`로 할지 결정해야 한다
+- **Why it matters:** generate(파일)·analyze(서브커맨드)·관리(인터랙티브만)가 갈라지면 학습·스크립트·에이전트 비용이 커짐. analyze 도입 시점이 표면 정리에 적합
+- **Depends on:** ASR-002, ASR-020, ASR-027, ASR-024
+- **Related ADRs:**
+  - `adr/cli-unified-command-surface.md` — approved — Option A: 통합 서브커맨드; bare files 제거; 인라인 continue 없음; `/select` 유지; global flags 공통; help↔MCP
+- **Resolution path:** adr
+- **Resolution:** Option A. `gemini generate|analyze|download|list|show|status|sync|cancel|delete|help`. 무명령→인터랙티브. `gemini <files>` 제거. 후속 턴은 인터랙티브만. analyze: `<files…>`, `-p`|stdin, 빈 prompt 취소. 인라인은 interactionId; `/select` 유지.
+- **Spec:** `spec/google-genai-mcp.md` — CLI 통합 커맨드, Decisions ASR-002/028
+- **Notes:** 2026-07-29 승인.
 

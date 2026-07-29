@@ -2,6 +2,7 @@
 
 export const TOOL_NAMES = [
   "generate",
+  "analyze",
   "download",
   "get_interaction",
   "continue_interaction",

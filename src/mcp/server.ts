@@ -3,6 +3,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
 import {
+  analyzeMedia,
   cancelInteraction,
   classifyError,
   continueInteraction,
@@ -80,6 +81,50 @@ export function createServer(): McpServer {
   );
 
   server.tool(
+    "analyze",
+    [
+      "Understand/analyze image, audio, or video with Gemini (default model gemini-3.5-flash).",
+      "Pass local paths and/or public http(s)/YouTube URLs in inputs (1–10).",
+      "prompt describes what to analyze and desired text format (JSON shape, checklist, etc.).",
+      "Large local files (>20MB) use Files API upload; smaller files are inlined.",
+      "Returns { interactionId, text }. Follow up with continue_interaction using the interactionId.",
+    ].join(" "),
+    {
+      inputs: z
+        .array(z.string())
+        .min(1)
+        .max(10)
+        .describe(
+          "Local file paths and/or public http(s)/YouTube URLs (1–10)",
+        ),
+      prompt: z
+        .string()
+        .min(1)
+        .describe(
+          "Analysis instruction and desired output format (non-empty)",
+        ),
+      model: z
+        .string()
+        .optional()
+        .describe("Override model; default gemini-3.5-flash"),
+    },
+    async ({ inputs, prompt, model }) => {
+      try {
+        const result = await analyzeMedia({
+          inputs,
+          prompt,
+          model,
+          baseDir: process.cwd(),
+          logger,
+        });
+        return jsonResult(result);
+      } catch (error) {
+        return errorResult(error);
+      }
+    },
+  );
+
+  server.tool(
     "download",
     [
       "Save completed interaction media to a local file.",
@@ -90,7 +135,9 @@ export function createServer(): McpServer {
     {
       interactionId: z
         .string()
-        .describe("Interaction ID returned by generate or continue_interaction"),
+        .describe(
+          "Interaction ID returned by generate, analyze, or continue_interaction",
+        ),
       filePath: z
         .string()
         .optional()
@@ -120,9 +167,7 @@ export function createServer(): McpServer {
       "If the ID is missing on the server, removes the local mapping and reports not-found.",
     ].join(" "),
     {
-      interactionId: z
-        .string()
-        .describe("Interaction ID to inspect"),
+      interactionId: z.string().describe("Interaction ID to inspect"),
     },
     async ({ interactionId }) => {
       try {
@@ -141,8 +186,9 @@ export function createServer(): McpServer {
     "continue_interaction",
     [
       "Continue a previous interaction with new user text (multi-turn edit / follow-up).",
-      "No modality pre-check — unsupported turns surface as API errors.",
+      "Works for generate and analyze interactionIds. No modality pre-check — unsupported turns surface as API errors.",
       "Same return shape as generate: sync fills files; async returns files=[] and needs get_interaction + download.",
+      "Analyze follow-ups typically return text via get_interaction outputText.",
     ].join(" "),
     {
       interactionId: z

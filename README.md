@@ -1,6 +1,6 @@
 # @cocrates/google-genai-mcp
 
-Google Gemini API의 **Image / Video / Speech(TTS) / Music** 생성을 [MCP](https://modelcontextprotocol.io) 서버와 CLI로 제공하는 TypeScript 패키지입니다.
+Google Gemini API의 **Image / Video / Speech(TTS) / Music 생성**과 **미디어 이해(analyze)** 를 [MCP](https://modelcontextprotocol.io) 서버와 CLI로 제공하는 TypeScript 패키지입니다.
 
 에이전트(OpenCode, Claude Desktop, Cursor 등)는 MCP 도구로, 개발자는 터미널에서 YAML/JSON 요청 파일로 동일한 생성·관리 흐름을 사용할 수 있습니다.
 
@@ -22,8 +22,9 @@ Google Gemini API의 **Image / Video / Speech(TTS) / Music** 생성을 [MCP](htt
 - **Video** — Gemini Omni Flash (`gemini-omni-flash-preview`), Interactions API, 기본 백그라운드 실행
 - **Speech** — Gemini TTS (단일·다중 화자, 음성 30종)
 - **Music** — Lyria 3 Clip / Pro (`lyria-3-clip-preview`, `lyria-3-pro-preview`)
+- **Analyze** — image/audio/video 이해 (`analyze` → `{ interactionId, text }`, 기본 `gemini-3.5-flash`)
 - Interactions API 기반 `interactionId` 관리, multi-turn 이어가기
-- 요청은 YAML/JSON 파일로 선언 (상대 경로는 요청 파일 디렉터리 기준)
+- 생성 요청은 YAML/JSON 파일로 선언 (상대 경로는 요청 파일 디렉터리 기준)
 
 ---
 
@@ -36,9 +37,10 @@ Google Gemini API의 **Image / Video / Speech(TTS) / Music** 생성을 [MCP](htt
 | Tool | 설명 |
 |------|------|
 | `generate` | YAML/JSON **파일 1개**로 생성 → `{ interactionId, files, background }` |
+| `analyze` | 미디어 이해 → `{ interactionId, text }` (`inputs`+`prompt`, 선택 `model`) |
 | `download` | 완료된 interaction 산출물 저장 (미완료 시 즉시 에러) |
 | `get_interaction` | 상태 조회 (서버에 없으면 로컬 매핑 정리) |
-| `continue_interaction` | `previous_interaction_id`로 이어가기 |
+| `continue_interaction` | `previous_interaction_id`로 이어가기 (생성·분석 공통) |
 | `list_interactions` | 로컬 목록 + 서버 상태 |
 | `sync_interactions` | 서버에 없는 로컬 항목 제거 |
 | `cancel_interaction` / `delete_interaction` | 취소 / 삭제 |
@@ -67,16 +69,35 @@ Google Gemini API의 **Image / Video / Speech(TTS) / Music** 생성을 [MCP](htt
 
 ## CLI
 
-진입점: `gemini`
+진입점: `gemini` — 형태: `gemini <command> [args…] [--verbose] [--force]`
 
 ```bash
-# 파일 기반 생성 (glob 지원)
-gemini ./images/*.yaml
-gemini a.yaml b.yaml --verbose --force
+# 생성
+gemini generate ./images/*.yaml
+gemini generate a.yaml b.yaml --verbose --force
 
-# 인터랙티브 모드
+# 분석 (prompt: -p 또는 stdin; 빈 prompt면 취소)
+gemini analyze ./out/clip.mp4 -p "의도대로 나왔는지 평가해 줘"
+echo "3문장으로 요약" | gemini analyze ./photo.png
+
+# 관리 (대상은 interactionId)
+gemini list
+gemini show <interactionId>
+gemini download <interactionId> [path]
+gemini help
+
+# 인터랙티브 모드 (명령 없음)
 gemini
 ```
+
+### 인라인 명령
+
+| 명령 | 설명 |
+|------|------|
+| `generate <files…>` | YAML/JSON 생성 |
+| `analyze <files…>` | 미디어 분석 → text + interactionId |
+| `download` / `list` / `show` / `status` / `sync` / `cancel` / `delete` | interaction 관리 |
+| `help [command]` | 도움말 (MCP tool 설명과 정합) |
 
 ### 인터랙티브 명령
 
@@ -118,7 +139,7 @@ npm install -g @cocrates/google-genai-mcp
 
 # 또는 npx
 npx @cocrates/google-genai-mcp   # MCP
-npx -y --package=@cocrates/google-genai-mcp gemini ./request.yaml
+npx -y --package=@cocrates/google-genai-mcp gemini generate ./request.yaml
 ```
 
 ```bash
@@ -256,7 +277,7 @@ CI에서 publish하려면 Node 18+, `NPM_TOKEN`, (선택) `GITHUB_TOKEN`을 시�
 "권수아"라는 22세 한국 여성 캐릭터의 기본 레퍼런스 이미지를 생성합니다. 클린 스튜디오 배경에서 전신 포즈로, 의상·헤어·체형 등 캐릭터 일관성의 기준점이 됩니다.
 
 ```bash
-gemini examples/kwon-su-a.yaml
+gemini generate examples/kwon-su-a.yaml
 ```
 
 #### 2. 카페 장면 + 변형 (`kwon-su-a-cafe.yaml`)
@@ -278,7 +299,7 @@ gemini examples/kwon-su-a.yaml
 
 ```bash
 # 기본 카페 장면 생성
-gemini examples/kwon-su-a-cafe.yaml
+gemini generate examples/kwon-su-a-cafe.yaml
 ```
 
 #### 3. 친구와 전화하는 장면
@@ -297,7 +318,7 @@ gemini examples/kwon-su-a-cafe.yaml
 - 분위기: 경쾌하고 장난스러운 친구 간 통화
 
 ```bash
-gemini examples/conversation.yaml
+gemini generate examples/conversation.yaml
 ```
 
 #### 5. 카페 배경 음악 (`cafe-bgm.yaml`)
@@ -307,7 +328,7 @@ gemini examples/conversation.yaml
 카페에서 흘러나오는 듯한 Lo-fi 재즈/Bossa Nova 스타일의 30초 배경 음악을 생성합니다. 어쿠스틱 기타, Fender Rhodes 피아노, 브러시 드럼이 어우러진 따뜻하고 편안한 트랙입니다.
 
 ```bash
-gemini examples/cafe-bgm.yaml
+gemini generate examples/cafe-bgm.yaml
 ```
 
 #### 6. 카페 영상 (`cafe-video.yaml`)
@@ -321,7 +342,7 @@ gemini examples/cafe-bgm.yaml
 - **오디오**: Lo-fi 재즈 배경음악 + 카페 백색소음
 
 ```bash
-gemini examples/cafe-video.yaml
+gemini generate examples/cafe-video.yaml
 ```
 
 ### 전체 파이프라인 실행 순서
