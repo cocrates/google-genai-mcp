@@ -58,7 +58,7 @@ function migrateStore(raw: InteractionsStore): {
     ) {
       const contaminated =
         !!item.userText &&
-        /\n(size|images|aspectRatio|seed|text|voice):/.test(item.userText);
+        /\n(size|images|references|aspectRatio|seed|text|voice):/.test(item.userText);
       if (!item.userText || contaminated) {
         const fromYaml = tryReadPromptFromYaml(item.requestFile);
         if (fromYaml && fromYaml !== item.userText) {

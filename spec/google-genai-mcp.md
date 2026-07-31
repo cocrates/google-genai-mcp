@@ -114,9 +114,18 @@ Google Gemini API의 Image / Video / Speech(TTS) / Music **생성**과 image / a
 - MCP: `generate` — **단일 요청 파일**, 응답 `{ interactionId, files, background }`. YAML `type` 자동 분기
 - MCP: `analyze` / `download` / `get_interaction` / `continue_interaction` / `list_interactions` / `sync_interactions` / `cancel_interaction` / `delete_interaction`
 - **상대 경로 기준 (YAML에 명시된 경로):** 요청 YAML/JSON 파일이 있는 디렉터리 (`dirname(requestFile)`)
-  - `params.images[].path`, `params.references[].path`, `output`, `download`의 상대 `filePath` 모두 동일 기준
+  - `params.references[].path`, `output`, `download`의 상대 `filePath` 모두 동일 기준
 - CLI `analyze`의 상대 미디어 경로: **프로세스 CWD** 기준
 - 상세 스키마는 아래 "Image/Video/Speech/Music 요청 파일 스키마" 및 "Analyze" 참조
+
+### 참조 미디어 필드 명명·검증 (ASR-029)
+- image / video / music 정규 필드: **`params.references`만** 허용
+- **`params.images`는 제거** — 존재하면 파싱 즉시 `INVALID_INPUT` (`params.images is removed; use params.references`)
+- 항목: `{ path, type? }`. image·music은 image만 허용(`type` 생략 시 image). video는 `image` | `video` | `audio` (확장자 추론 또는 명시)
+- 빈 `references: []` 및 필드 생략: 허용(텍스트 전용과 동일)
+- 파싱 단계 검증(API 호출 전): 경로 미존재 · 비파일(디렉터리 등) · 미지원/부적절 확장자·타입 → 즉시 `INVALID_INPUT` (MIME 폴백으로 진행하지 않음)
+- 한도: image 최대 19, video 최대 10, music 최대 10
+- speech: 참조 미디어 없음
 
 ### API 이중 체계 (ASR-014)
 - 기본 Interactions API 사용 (단일 생성)
@@ -355,8 +364,8 @@ Google Gemini API의 Image / Video / Speech(TTS) / Music **생성**과 image / a
 
 ### 경로 해석
 
-- 요청 파일 내 상대 경로(`params.images[].path`, `params.references[].path`, `output`)는 **해당 요청 파일의 디렉터리**를 기준으로 해석한다
-- 예: `/proj/reqs/gen.yaml`의 `images[].path: "./refs/a.jpg"` → `/proj/reqs/refs/a.jpg`
+- 요청 파일 내 상대 경로(`params.references[].path`, `output`)는 **해당 요청 파일의 디렉터리**를 기준으로 해석한다
+- 예: `/proj/reqs/gen.yaml`의 `references[].path: "./refs/a.jpg"` → `/proj/reqs/refs/a.jpg`
 - `download`의 상대 `filePath`도 동일하게, 해당 interaction의 `requestFile` 디렉터리 기준 (없으면 CLI=CWD / MCP=workspace)
 - **`output` 미지정 시 자동 파일명** 저장 위치: CLI = **CWD**, MCP = **workspace** (`process.cwd()`)
 - 절대 경로는 그대로 사용
@@ -397,7 +406,7 @@ params:
   prompt: |
     Take the blue floral dress from the first image
     and let the woman from the second image wear it.
-  images:
+  references:
     - path: "./references/dress.jpg"
     - path: "./references/woman.png"
   size: 1K
@@ -414,13 +423,18 @@ output: "./output/result.png"
 | `type` | ✅ | `"image"` | — | `"image"` |
 | `model` | ❌ | string | `"gemini-3.1-flash-image"` | `gemini-3.1-flash-image`, `gemini-3-pro-image` |
 | `params.prompt` | ✅ | multi-line string | — | 최대 4096자 |
-| `params.images` | ❌ | array | `[]` | 최대 19개 (Nano Banana 2: 14객체+5캐릭터) |
-| `params.images[].path` | ✅ | string | — | 이미지 파일 경로 (요청 파일 디렉터리 기준) |
+| `params.references` | ❌ | array | `[]` | 최대 19개 (Nano Banana 2: 14객체+5캐릭터). **image만** |
+| `params.references[].path` | ✅ | string | — | 이미지 파일 경로 (요청 파일 디렉터리 기준) |
+| `params.references[].type` | ❌ | enum | `image` | `image`만 허용. 생략 시 image |
 | `params.size` | ❌ | enum | `"1K"` | `"0.5K"`, `"1K"`, `"2K"`, `"4K"` |
 | `params.aspectRatio` | ❌ | string | `"16:9"` | `"1:1"`, `"3:4"`, `"4:3"`, `"9:16"`, `"16:9"`, `"21:9"` 등 |
 | `params.seed` | ❌ | int \| null | `null` | 재현성 시드 |
 | `background` | ❌ | boolean | `false` | 공통 파라미터 참조 |
 | `output` | ❌ | string | 자동 생성 | 출력 파일 경로 (.png, 요청 파일 디렉터리 기준) |
+
+#### 참조 허용 확장자 (image / music)
+- image: `.png`, `.jpg`, `.jpeg`, `.webp`, `.gif`, `.bmp`, `.heic`, `.heif`
+- `params.images`는 **불가** — 사용 시 오류
 
 ### Video 요청
 
@@ -457,7 +471,6 @@ output: "./output/result.mp4"
 | `params.references` | ❌ | array | `[]` | 멀티모달 참조 (최대 10). `image` / `video` / `audio` |
 | `params.references[].path` | ✅ | string | — | 미디어 파일 경로 (요청 파일 디렉터리 기준) |
 | `params.references[].type` | ❌ | enum | 확장자로 추론 | `image`, `video`, `audio` |
-| `params.images` | ❌ | array | — | **레거시.** 이미지 전용; 파싱 시 `references`(`type: image`)로 매핑. `references`와 동시 사용 불가 |
 | `params.durationSeconds` | ❌ | number | 모델 기본 | `response_format.duration`로 `"Ns"` 전달 |
 | `params.resolution` | ❌ | string | — | 파싱만 함 (Omni video_config에 resolution 필드 없음) |
 | `params.aspectRatio` | ❌ | string | `"16:9"` | `"16:9"`, `"9:16"` |
@@ -477,6 +490,8 @@ output: "./output/result.mp4"
   - 멀티턴 수정은 `continue_interaction` (YAML `task: edit` 없음)
 - YAML에 `task`가 있어도 파싱·전송하지 않음
 - **API 제한 (Omni preview):** 오디오 참조 업로드는 현재 미지원일 수 있음. 짧은 video 참조·복수 video 참조는 품질이 떨어질 수 있음 (Google 문서 Limitations)
+- **참조 허용 확장자 (video):** image 위와 동일 + video `.mp4` `.webm` `.mov` `.mpeg` `.mpg` `.avi` `.mkv` + audio `.mp3` `.wav` `.ogg` `.m4a` `.aac` `.flac` `.opus`
+- `params.images`는 **불가** — 사용 시 오류
 
 ### Speech 요청 (TTS)
 
@@ -619,7 +634,7 @@ params:
     [0:00 - 0:20] Soft pads and distant piano
     [0:20 - 1:00] Add sparse percussion and rising strings
     [1:00 - 1:30] Peak, then fade to piano alone
-  images:
+  references:
     - path: "./refs/desert-sunset.jpg"
     - path: "./refs/city-night.png"
   outputFormat: mp3
@@ -635,8 +650,9 @@ output: "./output/ambient.mp3"
 | `model` | ❌ | string | `"lyria-3-clip-preview"` | `lyria-3-clip-preview` (30s), `lyria-3-pro-preview` (풀송) |
 | `params.prompt` | ✅ | multi-line string | — | 장르·분위기·악기·길이·구조. 타임스탬프/`[Verse]` 등 프롬프트 내 기술 가능 |
 | `params.lyrics` | ❌ | multi-line string | — | 커스텀 가사. 있으면 API `input` 텍스트에 prompt와 합성해 전달 |
-| `params.images` | ❌ | array | `[]` | 영감 이미지 최대 **10** |
-| `params.images[].path` | ✅ | string | — | 요청 파일 디렉터리 기준 |
+| `params.references` | ❌ | array | `[]` | 영감 이미지 최대 **10**. **image만** |
+| `params.references[].path` | ✅ | string | — | 요청 파일 디렉터리 기준 |
+| `params.references[].type` | ❌ | enum | `image` | `image`만 허용. 생략 시 image |
 | `params.outputFormat` | ❌ | enum | `"mp3"` | 로컬 저장 힌트. API에는 `response_format: { type: "audio" }`만 전송 (기본 MP3). Pro WAV는 응답 mime에 따름 |
 | `params.lyricsOutput` | ❌ | string | — | 응답 `output_text`(생성 가사/구조) 저장 경로. 미지정 시 저장 안 함 |
 | `background` | ❌ | boolean | `false` | Pro 장편은 `true` 권장 |
@@ -804,8 +820,9 @@ Use the following lyrics and section tags:
 - YAML/JSON 파일 파싱 및 검증
 - 필수 필드 누락 시 명확한 오류 메시지
 - 상대 경로는 **요청 파일 디렉터리** 기준으로 해석
-- `images[].path` / `references[].path`로 지정된 파일 존재 여부 검증
-- 모델별 참조 수 제한 검증 (Image: 19개, Video references: 10개)
+- `references[].path`로 지정된 파일: 존재·일반 파일 여부·허용 확장자/타입 검증 (미통과 시 즉시 실패)
+- `params.images` 존재 시 즉시 실패 (`use params.references`)
+- 모델별 참조 수 제한 검증 (Image: 19개, Video/Music references: 10개)
 
 ### 장문 Speech 처리
 - 낭독 본문이 4,000 bytes(UTF-8) 이하면 단일 API 요청으로 처리 (기존 동작 유지)

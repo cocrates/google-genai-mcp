@@ -8,11 +8,6 @@ export interface Config {
 
 export type RequestType = "image" | "video" | "speech" | "music";
 
-export interface ImageRef {
-  path: string;
-}
-
-/** Multimodal reference for Omni video (image / video / audio). */
 export type MediaRefType = "image" | "video" | "audio";
 
 export interface MediaRef {
@@ -22,7 +17,8 @@ export interface MediaRef {
 
 export interface ImageParams {
   prompt: string;
-  images?: ImageRef[];
+  /** Reference images (type must be image). */
+  references?: MediaRef[];
   size?: "0.5K" | "1K" | "2K" | "4K";
   aspectRatio?: string;
   seed?: number | null;
@@ -30,10 +26,7 @@ export interface ImageParams {
 
 export interface VideoParams {
   prompt: string;
-  /**
-   * Multimodal references (image, video, audio). Prefer this over legacy
-   * `params.images` in YAML (images are still accepted and mapped here).
-   */
+  /** Multimodal references (image, video, audio). */
   references?: MediaRef[];
   /** Output duration in seconds (sent as response_format.duration, e.g. "8s"). */
   durationSeconds?: number;
@@ -62,7 +55,8 @@ export interface MusicParams {
   prompt: string;
   /** Optional lyrics merged into the API text input with the prompt. */
   lyrics?: string;
-  images?: ImageRef[];
+  /** Inspiration images (type must be image). */
+  references?: MediaRef[];
   outputFormat?: "mp3" | "wav";
   /** If set, save model-generated lyrics/structure text to this path. */
   lyricsOutput?: string;

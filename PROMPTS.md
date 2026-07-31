@@ -314,7 +314,7 @@ params:
   prompt: |
     Take the blue floral dress from the first image
     and let the woman from the second image wear it.
-  images:
+  references:
     - path: "./references/dress.jpg"
     - path: "./references/woman.png"
   size: 1K
@@ -352,7 +352,7 @@ params:
   prompt: |
     A woman wearing a blue floral dress
     walks through a sunlit garden.
-  images:
+  references:
     - path: "./references/dress.jpg"
     - path: "./references/woman.png"
   durationSeconds: 8

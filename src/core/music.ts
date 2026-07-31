@@ -40,8 +40,8 @@ function buildInputParts(request: MusicRequest): unknown[] {
     { type: "text", text: composeMusicInputText(request) },
   ];
 
-  if (request.params.images) {
-    for (const image of request.params.images) {
+  if (request.params.references) {
+    for (const image of request.params.references) {
       const data = fs.readFileSync(image.path);
       const ext = path.extname(image.path).toLowerCase();
       parts.push({

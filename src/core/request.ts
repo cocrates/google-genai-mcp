@@ -24,6 +24,35 @@ const MAX_MUSIC_REFS = 10;
 
 const MEDIA_REF_TYPES = new Set<MediaRefType>(["image", "video", "audio"]);
 
+const IMAGE_EXTS = new Set([
+  ".png",
+  ".jpg",
+  ".jpeg",
+  ".webp",
+  ".gif",
+  ".bmp",
+  ".heic",
+  ".heif",
+]);
+const VIDEO_EXTS = new Set([
+  ".mp4",
+  ".webm",
+  ".mov",
+  ".mpeg",
+  ".mpg",
+  ".avi",
+  ".mkv",
+]);
+const AUDIO_EXTS = new Set([
+  ".mp3",
+  ".wav",
+  ".ogg",
+  ".m4a",
+  ".aac",
+  ".flac",
+  ".opus",
+]);
+
 function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -36,47 +65,31 @@ function requireString(obj: Record<string, unknown>, key: string, label: string)
   return value;
 }
 
-function resolveImages(
-  rawImages: unknown,
-  requestDir: string,
-  maxCount: number,
-  label: string,
-): Array<{ path: string }> | undefined {
-  if (rawImages === undefined) {
-    return undefined;
-  }
-
-  if (!Array.isArray(rawImages)) {
+/** `params.images` is removed; callers must use `params.references`. */
+function rejectLegacyImages(paramsRaw: Record<string, unknown>): void {
+  if (paramsRaw.images !== undefined) {
     throw new GeminiError(
-      `params.images must be an array for ${label} requests`,
+      "params.images is removed; use params.references (e.g. references: [{ path: \"./ref.png\" }])",
       ErrorCode.INVALID_INPUT,
     );
   }
+}
 
-  if (rawImages.length > maxCount) {
+function assertExtensionMatchesType(
+  resolved: string,
+  type: MediaRefType,
+  fieldLabel: string,
+  index: number,
+): void {
+  const ext = path.extname(resolved).toLowerCase();
+  const allowed =
+    type === "image" ? IMAGE_EXTS : type === "video" ? VIDEO_EXTS : AUDIO_EXTS;
+  if (!allowed.has(ext)) {
     throw new GeminiError(
-      `${label} requests support at most ${maxCount} reference images`,
+      `${fieldLabel}[${index}]: extension "${ext}" is not valid for type ${type} (${resolved})`,
       ErrorCode.INVALID_INPUT,
     );
   }
-
-  const images: Array<{ path: string }> = [];
-  for (const item of rawImages) {
-    if (!isObject(item)) {
-      throw new GeminiError(
-        "Each params.images entry must be an object with path",
-        ErrorCode.INVALID_INPUT,
-      );
-    }
-    const imagePath = requireString(item, "path", "params.images[].path");
-    const resolved = resolveAgainst(requestDir, imagePath);
-    if (!fs.existsSync(resolved)) {
-      throw new GeminiError(`Image file not found: ${resolved}`, ErrorCode.INVALID_INPUT);
-    }
-    images.push({ path: resolved });
-  }
-
-  return images;
 }
 
 function resolveMediaRefs(
@@ -84,7 +97,11 @@ function resolveMediaRefs(
   requestDir: string,
   maxCount: number,
   fieldLabel: string,
-  defaultType?: MediaRefType,
+  options: {
+    requestKind: "image" | "video" | "music";
+    /** When set, omit type → this; and only this type is allowed. */
+    imageOnly?: boolean;
+  },
 ): MediaRef[] | undefined {
   if (rawRefs === undefined) {
     return undefined;
@@ -92,16 +109,20 @@ function resolveMediaRefs(
 
   if (!Array.isArray(rawRefs)) {
     throw new GeminiError(
-      `${fieldLabel} must be an array for video requests`,
+      `${fieldLabel} must be an array for ${options.requestKind} requests`,
       ErrorCode.INVALID_INPUT,
     );
   }
 
   if (rawRefs.length > maxCount) {
     throw new GeminiError(
-      `video requests support at most ${maxCount} references`,
+      `${options.requestKind} requests support at most ${maxCount} references`,
       ErrorCode.INVALID_INPUT,
     );
+  }
+
+  if (rawRefs.length === 0) {
+    return undefined;
   }
 
   const refs: MediaRef[] = [];
@@ -115,9 +136,26 @@ function resolveMediaRefs(
     }
     const refPath = requireString(item, "path", `${fieldLabel}[].path`);
     const resolved = resolveAgainst(requestDir, refPath);
+
     if (!fs.existsSync(resolved)) {
       throw new GeminiError(
         `Reference file not found: ${resolved}`,
+        ErrorCode.INVALID_INPUT,
+      );
+    }
+    let stat: fs.Stats;
+    try {
+      stat = fs.statSync(resolved);
+    } catch (error) {
+      throw new GeminiError(
+        `Cannot stat reference file: ${resolved}`,
+        ErrorCode.INVALID_INPUT,
+        error,
+      );
+    }
+    if (!stat.isFile()) {
+      throw new GeminiError(
+        `Reference path is not a file: ${resolved}`,
         ErrorCode.INVALID_INPUT,
       );
     }
@@ -131,53 +169,24 @@ function resolveMediaRefs(
         );
       }
       type = item.type as MediaRefType;
-    } else if (defaultType) {
-      type = defaultType;
+    } else if (options.imageOnly) {
+      type = "image";
     } else {
       type = inferMediaRefType(resolved);
     }
 
+    if (options.imageOnly && type !== "image") {
+      throw new GeminiError(
+        `${options.requestKind} references support image only; got type ${type} at ${fieldLabel}[${i}] (${resolved})`,
+        ErrorCode.INVALID_INPUT,
+      );
+    }
+
+    assertExtensionMatchesType(resolved, type, fieldLabel, i);
     refs.push({ path: resolved, type });
   }
 
   return refs;
-}
-
-/** Prefer params.references; legacy params.images maps to image refs. */
-function resolveVideoReferences(
-  paramsRaw: Record<string, unknown>,
-  requestDir: string,
-): MediaRef[] | undefined {
-  const hasReferences = paramsRaw.references !== undefined;
-  const hasImages = paramsRaw.images !== undefined;
-
-  if (hasReferences && hasImages) {
-    throw new GeminiError(
-      "Use params.references or params.images for video, not both",
-      ErrorCode.INVALID_INPUT,
-    );
-  }
-
-  if (hasReferences) {
-    return resolveMediaRefs(
-      paramsRaw.references,
-      requestDir,
-      MAX_VIDEO_REFS,
-      "params.references",
-    );
-  }
-
-  if (hasImages) {
-    return resolveMediaRefs(
-      paramsRaw.images,
-      requestDir,
-      MAX_VIDEO_REFS,
-      "params.images",
-      "image",
-    );
-  }
-
-  return undefined;
 }
 
 function parseImageRequest(
@@ -189,14 +198,21 @@ function parseImageRequest(
     throw new GeminiError("Missing params for image request", ErrorCode.INVALID_INPUT);
   }
 
+  rejectLegacyImages(paramsRaw);
   const prompt = requireString(paramsRaw, "prompt", "params.prompt");
-  const images = resolveImages(paramsRaw.images, requestDir, MAX_IMAGE_REFS, "image");
+  const references = resolveMediaRefs(
+    paramsRaw.references,
+    requestDir,
+    MAX_IMAGE_REFS,
+    "params.references",
+    { requestKind: "image", imageOnly: true },
+  );
 
   const request: ImageRequest = {
     type: "image",
     params: {
       prompt,
-      ...(images ? { images } : {}),
+      ...(references ? { references } : {}),
     },
   };
 
@@ -228,8 +244,15 @@ function parseVideoRequest(
     throw new GeminiError("Missing params for video request", ErrorCode.INVALID_INPUT);
   }
 
+  rejectLegacyImages(paramsRaw);
   const prompt = requireString(paramsRaw, "prompt", "params.prompt");
-  const references = resolveVideoReferences(paramsRaw, requestDir);
+  const references = resolveMediaRefs(
+    paramsRaw.references,
+    requestDir,
+    MAX_VIDEO_REFS,
+    "params.references",
+    { requestKind: "video" },
+  );
 
   const request: VideoRequest = {
     type: "video",
@@ -323,19 +346,21 @@ function parseMusicRequest(
     throw new GeminiError("Missing params for music request", ErrorCode.INVALID_INPUT);
   }
 
+  rejectLegacyImages(paramsRaw);
   const prompt = requireString(paramsRaw, "prompt", "params.prompt");
-  const images = resolveImages(
-    paramsRaw.images,
+  const references = resolveMediaRefs(
+    paramsRaw.references,
     requestDir,
     MAX_MUSIC_REFS,
-    "music",
+    "params.references",
+    { requestKind: "music", imageOnly: true },
   );
 
   const request: MusicRequest = {
     type: "music",
     params: {
       prompt,
-      ...(images ? { images } : {}),
+      ...(references ? { references } : {}),
     },
   };
 

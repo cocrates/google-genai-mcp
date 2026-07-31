@@ -34,6 +34,7 @@ Living registry for google-genai-mcp. Status of each ASR must stay current.
 | ASR-026 | Analyze interaction·모델 기본값 | Structure & organization | approved | adr/analyze-interaction-and-model.md | spec/google-genai-mcp.md — Analyze |
 | ASR-027 | Analyze CLI 표면 | Deliverable form | approved | adr/analyze-cli-surface.md, adr/cli-unified-command-surface.md | spec/google-genai-mcp.md — CLI |
 | ASR-028 | CLI 통합 커맨드 표면 | Deliverable form | approved | adr/cli-unified-command-surface.md | spec/google-genai-mcp.md — CLI, Decisions |
+| ASR-029 | 참조 미디어 필드 명명·검증 | Deliverable form | approved | adr/unified-references-field.md | spec/google-genai-mcp.md — references |
 
 ## Dependency Order (recommended review path)
 
@@ -65,6 +66,7 @@ Living registry for google-genai-mcp. Status of each ASR must stay current.
 26. ASR-026 (Analyze interaction·모델 기본값)
 27. ASR-027 (Analyze CLI 표면)
 28. ASR-028 (CLI 통합 커맨드 표면)
+29. ASR-029 (참조 미디어 필드 명명·검증)
 
 ## ASR Detail
 
@@ -161,10 +163,11 @@ Living registry for google-genai-mcp. Status of each ASR must stay current.
 - **Depends on:** ASR-005
 - **Related ADRs:**
   - `adr/speech-chunk-failure-recovery.md` — approved — 장문 청크 루프에 기존 분류·백오프 규칙을 확장 적용
+  - `adr/unified-references-field.md` — approved — 참조 경로·타입 부적절 시 즉시 실패 (ASR-029)
 - **Resolution path:** direct-input
 - **Resolution:** 유형별 처리: 입력 오류(즉시 실패), 인증 오류(즉시 실패), rate limit(지수 백오프 최대 3회), 서비스 오류(지수 백오프 최대 2회), quota 초과(즉시 실패). MCP는 tool error 응답, CLI는 stderr + exit code (0:성공, 1:일반, 2:입력, 3:인증, 4:API). 재시도는 rate limit과 일시적 서비스 오류만.
 - **Spec:** —
-- **Notes:** 장문 Speech 청크 단위 적용은 ASR-022 참조
+- **Notes:** 장문 Speech 청크 단위 적용은 ASR-022 참조. 참조 미디어 검증 엄격화는 ASR-029.
 
 ### ASR-008 — 로깅 및 관찰 가능성
 
@@ -238,11 +241,12 @@ Living registry for google-genai-mcp. Status of each ASR must stay current.
 - **Statement:** CLI와 MCP 모두에서 생성 파라미터를 YAML/JSON 파일로 입력받는 방식을 결정
 - **Why it matters:** Image/Video/Audio 생성 파라미터는 많고, 프롬프트는 길고 복잡할 수 있음. 파일 기반 입력이 없으면 CLI에서는 에스케이프 문제, MCP에서는 JSON-RPC 메시지 크기 제한에 직면
 - **Depends on:** ASR-002, ASR-004
-- **Related ADRs:** —
+- **Related ADRs:**
+  - `adr/unified-references-field.md` — approved — 참조 필드명·검증 (ASR-029); `images` 제거
 - **Resolution path:** direct-input
-- **Resolution:** CLI는 파일 기반(멀티·glob). MCP `generate`는 **단일 filePath**만 — 다건은 클라이언트 다중/병렬 호출. 응답 `{interactionId,files,background}`. 상대 경로=요청 파일 디렉터리. 자동 파일명 위치는 ASR-016.
+- **Resolution:** CLI는 파일 기반(멀티·glob). MCP `generate`는 **단일 filePath**만 — 다건은 클라이언트 다중/병렬 호출. 응답 `{interactionId,files,background}`. 상대 경로=요청 파일 디렉터리. 자동 파일명 위치는 ASR-016. 참조 미디어는 `params.references`만 (ASR-029).
 - **Spec:** `spec/google-genai-mcp.md` — Requirements, 경로 해석, Interaction 관리
-- **Notes:** 인터랙티브 모드에서 대화 이어가기는 Interactions API `previous_interaction_id`로 처리 — 원본 파라미터 재전송 불필요
+- **Notes:** 인터랙티브 모드에서 대화 이어가기는 Interactions API `previous_interaction_id`로 처리 — 원본 파라미터 재전송 불필요. 2026-07-31: ASR-029 Option A + `images` 제거 승인.
 
 ### ASR-014 — API 이중 체계 관리
 
@@ -451,4 +455,18 @@ Living registry for google-genai-mcp. Status of each ASR must stay current.
 - **Resolution:** Option A. `gemini generate|analyze|download|list|show|status|sync|cancel|delete|help`. 무명령→인터랙티브. `gemini <files>` 제거. 후속 턴은 인터랙티브만. analyze: `<files…>`, `-p`|stdin, 빈 prompt 취소. 인라인은 interactionId; `/select` 유지.
 - **Spec:** `spec/google-genai-mcp.md` — CLI 통합 커맨드, Decisions ASR-002/028
 - **Notes:** 2026-07-29 승인.
+
+### ASR-029 — 참조 미디어 필드 명명·검증
+
+- **Category:** Deliverable form
+- **Status:** approved
+- **Statement:** image / video / music 생성 YAML의 참조 미디어 필드명을 통일할지(`references` vs 타입별 `images`), 그리고 경로 미존재·타입 부적절 시 즉시 실패할지 결정해야 한다
+- **Why it matters:** 타입마다 필드명이 다르면 에이전트·사용자 실수가 늘고, 부적절 참조를 조용히 넘기면 잘못된 API 호출·디버깅 비용이 커진다
+- **Depends on:** ASR-013, ASR-007
+- **Related ADRs:**
+  - `adr/unified-references-field.md` — approved — Option A: `references` 통일 + 엄격 검증; `images` 제거
+- **Resolution path:** adr
+- **Resolution:** Option A. image/video/music 정규 필드 `params.references`만 허용. `params.images`는 제거(사용 시 `INVALID_INPUT`). 내부 타입도 `references`. 미존재·비파일·부적절 타입/확장자는 파싱 시 즉시 실패. 빈 `[]` 허용. speech 해당 없음.
+- **Spec:** `spec/google-genai-mcp.md` — Image/Video/Music references, 요청 파일 처리, Decisions ASR-029
+- **Notes:** 2026-07-31 Option A 승인. 동일일 Downstream: 레거시 `images` 완전 제거.
 

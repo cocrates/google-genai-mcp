@@ -26,8 +26,8 @@ const DEFAULT_MODEL = "gemini-3.1-flash-image";
 function buildInputParts(request: ImageRequest): unknown[] {
   const parts: unknown[] = [];
 
-  if (request.params.images) {
-    for (const image of request.params.images) {
+  if (request.params.references) {
+    for (const image of request.params.references) {
       const data = fs.readFileSync(image.path);
       const ext = path.extname(image.path).toLowerCase();
       parts.push({
@@ -142,8 +142,8 @@ async function generateImageViaGenerateContent(
   const model = request.model ?? DEFAULT_MODEL;
 
   const parts: Array<Record<string, unknown>> = [];
-  if (request.params.images) {
-    for (const image of request.params.images) {
+  if (request.params.references) {
+    for (const image of request.params.references) {
       const data = fs.readFileSync(image.path);
       const ext = path.extname(image.path).toLowerCase();
       parts.push({

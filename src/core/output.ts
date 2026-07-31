@@ -128,8 +128,18 @@ export function getImageMimeType(ext: string): string {
     ".jpeg": "image/jpeg",
     ".webp": "image/webp",
     ".gif": "image/gif",
+    ".bmp": "image/bmp",
+    ".heic": "image/heic",
+    ".heif": "image/heif",
   };
-  return map[ext.toLowerCase()] ?? "image/png";
+  const mime = map[ext.toLowerCase()];
+  if (!mime) {
+    throw new GeminiError(
+      `Unsupported image extension: ${ext}`,
+      ErrorCode.INVALID_INPUT,
+    );
+  }
+  return mime;
 }
 
 export function getVideoMimeType(ext: string): string {
@@ -139,8 +149,17 @@ export function getVideoMimeType(ext: string): string {
     ".mov": "video/quicktime",
     ".mpeg": "video/mpeg",
     ".mpg": "video/mpeg",
+    ".avi": "video/x-msvideo",
+    ".mkv": "video/x-matroska",
   };
-  return map[ext.toLowerCase()] ?? "video/mp4";
+  const mime = map[ext.toLowerCase()];
+  if (!mime) {
+    throw new GeminiError(
+      `Unsupported video extension: ${ext}`,
+      ErrorCode.INVALID_INPUT,
+    );
+  }
+  return mime;
 }
 
 export function getAudioMimeType(format: string): string {
@@ -168,8 +187,16 @@ export function getMediaMimeType(
     ".m4a": "audio/mp4",
     ".aac": "audio/aac",
     ".flac": "audio/flac",
+    ".opus": "audio/opus",
   };
-  return audioMap[e] ?? "audio/mpeg";
+  const mime = audioMap[e];
+  if (!mime) {
+    throw new GeminiError(
+      `Unsupported audio extension: ${e}`,
+      ErrorCode.INVALID_INPUT,
+    );
+  }
+  return mime;
 }
 
 /** Infer media kind from file extension when YAML omits `type`. */
