@@ -83,9 +83,10 @@ export function createServer(): McpServer {
   server.tool(
     "analyze",
     [
-      "Understand/analyze image, audio, or video with Gemini (default model gemini-3.5-flash).",
+      "Understand/analyze image, audio, or video with Gemini (default model gemini-3.6-flash).",
       "Pass local paths and/or public http(s)/YouTube URLs in inputs (1–10).",
-      "prompt describes what to analyze and desired text format (JSON shape, checklist, etc.).",
+      "A .yaml/.yml/.json generation request among inputs is detected by extension: analyze its output (if no other media entries), and build a fidelity checklist prompt that includes that YAML plus recursively referenced YAMLs from params.references (YAML paths only; media refs are not inlined).",
+      "prompt is optional when a generation YAML/JSON is in inputs (user text is prepended to the checklist); required for media-only inputs.",
       "Large local files (>20MB) use Files API upload; smaller files are inlined.",
       "Returns { interactionId, text }. Follow up with continue_interaction using the interactionId.",
     ].join(" "),
@@ -95,18 +96,18 @@ export function createServer(): McpServer {
         .min(1)
         .max(10)
         .describe(
-          "Local file paths and/or public http(s)/YouTube URLs (1–10)",
+          "Media paths/URLs and/or one generation YAML/JSON (.yaml/.yml/.json) (1–10)",
         ),
       prompt: z
         .string()
-        .min(1)
+        .optional()
         .describe(
-          "Analysis instruction and desired output format (non-empty)",
+          "Analysis instruction and desired output format. Optional when inputs include a generation YAML/JSON (prepended to the default checklist)",
         ),
       model: z
         .string()
         .optional()
-        .describe("Override model; default gemini-3.5-flash"),
+        .describe("Override model; default gemini-3.6-flash"),
     },
     async ({ inputs, prompt, model }) => {
       try {

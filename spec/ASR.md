@@ -393,12 +393,12 @@ Living registry for google-genai-mcp. Status of each ASR must stay current.
 - **Why it matters:** generate와 달리 파라미터가 단순하고 출력 형식이 요청마다 다르므로, 잘못된 계약은 에이전트 호출 비용을 높이거나 스키마를 과다 설계하게 됨
 - **Depends on:** ASR-023, ASR-013, ASR-006
 - **Related ADRs:**
-  - `adr/analyze-request-response-schema.md` — approved — Option A: MCP 네이티브 `inputs`+`prompt`(+`model?`) → `{ interactionId, text }`, YAML 없음
+  - `adr/analyze-request-response-schema.md` — approved — Option A: MCP 네이티브 `inputs`+`prompt`(+`model?`) → `{ interactionId, text }`; 2026-08-01 개정: `inputs`의 `.yaml`/`.json`을 생성 스펙으로 인식해 output 분석·체크리스트
   - `adr/analyze-interaction-and-model.md` — approved — 응답에 `interactionId` 포함 확정
 - **Resolution path:** adr
-- **Resolution:** Option A — `analyze({ inputs: string[], prompt: string, model?: string })` → `{ interactionId, text }`. 단일도 `inputs` 배열(길이 ≥ 1). 출력 형식은 prompt에 명시. 서버측 `responseSchema`·필수 YAML은 MVP 제외.
+- **Resolution:** Option A — `analyze({ inputs: string[], prompt?: string, model?: string })` → `{ interactionId, text }`. 기본: 미디어 `inputs`+`prompt`. `inputs`에 생성 YAML/JSON(확장자, 최대 1개)이 있으면 `output` 분석·`prompt` 생략 가능·합성 프롬프트에 요청/참조 YAML(재귀)+충실도 체크리스트. 별도 `requestFile` 파라미터·`type: analyze`·서버측 `responseSchema`는 제외.
 - **Spec:** `spec/google-genai-mcp.md` — Analyze 표면·응답 스키마
-- **Notes:** 2026-07-29 승인. interactionId는 ASR-026에서 확정·스키마 개정.
+- **Notes:** 2026-07-29 승인. interactionId는 ASR-026에서 확정·스키마 개정. 2026-08-01: 생성 스펙을 `inputs` 확장자로 통합(Amendments).
 
 ### ASR-025 — Analyze 입력·업로드 전략
 

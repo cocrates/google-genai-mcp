@@ -89,3 +89,17 @@ YAML 없이 `analyze({ inputs, prompt, model? })` → `{ interactionId, text }`.
 
 ## Approved
 - 2026-07-29: Option A, user confirmed
+
+## Amendments
+- 2026-08-01: Generation YAML fidelity analysis via `inputs` extension detection
+  (`.yaml`/`.yml`/`.json`), not a separate `requestFile`/`-r` parameter.
+  - When a request file is among `inputs`: default media → YAML `output` if no
+    other media entries; compose prompt = optional user prompt + fixed checklist
+    (spec fidelity / unspecified content / visual defects) + request YAML +
+    recursively referenced YAMLs from `params.references` (YAML/JSON paths only;
+    media paths are not inlined). Relative paths resolve against each YAML's
+    own directory.
+  - At most one request file among `inputs`. Does **not** introduce `type: analyze`
+    YAML (Option B still rejected).
+- 2026-08-01: `params.references[].path` may be a generation YAML/JSON; generate
+  uses that file's `output` media (path relative to the referenced YAML).

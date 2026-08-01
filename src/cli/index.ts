@@ -15,6 +15,7 @@ import {
   getAllNewestFirst,
   getById,
   getInteractionStatus,
+  isAnalyzeRequestSpecPath,
   syncInteractions,
 } from "../core/index.js";
 
@@ -138,24 +139,27 @@ async function cmdAnalyze(
 
   const inputs = await expandGlobs(rest);
   if (inputs.length === 0) {
-    console.error("analyze requires at least one media path or URL");
+    console.error(
+      "analyze requires at least one media path/URL or generation YAML/JSON",
+    );
     return ErrorCode.INVALID_INPUT;
   }
 
+  const hasRequestSpec = inputs.some((p) => isAnalyzeRequestSpecPath(p));
   let prompt = promptFlag;
-  if (prompt === undefined) {
+  if (prompt === undefined && !hasRequestSpec) {
     prompt = await readStdinPrompt();
   }
-  if (!prompt.trim()) {
+  if (!prompt?.trim() && !hasRequestSpec) {
     console.error(
-      "analyze prompt is empty; provide --prompt/-p or non-empty stdin",
+      "analyze prompt is empty; provide --prompt/-p, non-empty stdin, or a generation YAML/JSON",
     );
     return ErrorCode.INVALID_INPUT;
   }
 
   const result = await analyzeMedia({
     inputs,
-    prompt,
+    prompt: prompt ?? "",
     model,
     baseDir: process.cwd(),
     logger,

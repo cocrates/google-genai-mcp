@@ -24,6 +24,9 @@ const MAX_MUSIC_REFS = 10;
 
 const MEDIA_REF_TYPES = new Set<MediaRefType>(["image", "video", "audio"]);
 
+/** Generation request files allowed in `params.references[].path`. */
+const SPEC_REF_EXTS = new Set([".yaml", ".yml", ".json"]);
+
 const IMAGE_EXTS = new Set([
   ".png",
   ".jpg",
@@ -65,11 +68,36 @@ function requireString(obj: Record<string, unknown>, key: string, label: string)
   return value;
 }
 
+/** True when path points at a generation request YAML/JSON by extension. */
+export function isSpecReferencePath(filePath: string): boolean {
+  return SPEC_REF_EXTS.has(path.extname(filePath).toLowerCase());
+}
+
+/**
+ * Resolve optional top-level `output`. Empty/whitespace is invalid
+ * (would otherwise collapse to the request directory).
+ */
+function resolveOutputField(
+  raw: Record<string, unknown>,
+  requestDir: string,
+): string | undefined {
+  if (raw.output === undefined || raw.output === null) {
+    return undefined;
+  }
+  if (typeof raw.output !== "string" || raw.output.trim() === "") {
+    throw new GeminiError(
+      "output must be a non-empty file path",
+      ErrorCode.INVALID_INPUT,
+    );
+  }
+  return resolveAgainst(requestDir, raw.output.trim());
+}
+
 /** `params.images` is removed; callers must use `params.references`. */
 function rejectLegacyImages(paramsRaw: Record<string, unknown>): void {
   if (paramsRaw.images !== undefined) {
     throw new GeminiError(
-      "params.images is removed; use params.references (e.g. references: [{ path: \"./ref.png\" }])",
+      "params.images is removed; use params.references (e.g. references: [{ path: \"./char.yaml\" }])",
       ErrorCode.INVALID_INPUT,
     );
   }
@@ -92,6 +120,122 @@ function assertExtensionMatchesType(
   }
 }
 
+function assertExistingFile(resolved: string, label: string): void {
+  if (!fs.existsSync(resolved)) {
+    throw new GeminiError(`${label} not found: ${resolved}`, ErrorCode.INVALID_INPUT);
+  }
+  let stat: fs.Stats;
+  try {
+    stat = fs.statSync(resolved);
+  } catch (error) {
+    throw new GeminiError(
+      `Cannot stat ${label}: ${resolved}`,
+      ErrorCode.INVALID_INPUT,
+      error,
+    );
+  }
+  if (!stat.isFile()) {
+    throw new GeminiError(
+      `${label} is not a file: ${resolved}`,
+      ErrorCode.INVALID_INPUT,
+    );
+  }
+}
+
+/**
+ * Read a generation YAML/JSON and return its `output` media path, resolved
+ * against **that file's directory** (not the caller's).
+ */
+function loadSpecOutputMedia(
+  absSpecPath: string,
+  fieldLabel: string,
+  index: number,
+): string {
+  assertExistingFile(absSpecPath, "Reference spec");
+  const specDir = path.dirname(absSpecPath);
+  const text = fs.readFileSync(absSpecPath, "utf-8");
+  const ext = path.extname(absSpecPath).toLowerCase();
+  let raw: unknown;
+  try {
+    raw = ext === ".json" ? JSON.parse(text) : parseYaml(text);
+  } catch (error) {
+    throw new GeminiError(
+      `${fieldLabel}[${index}]: failed to parse reference spec ${absSpecPath}: ${
+        error instanceof Error ? error.message : String(error)
+      }`,
+      ErrorCode.INVALID_INPUT,
+      error,
+    );
+  }
+  if (!isObject(raw)) {
+    throw new GeminiError(
+      `${fieldLabel}[${index}]: reference spec must be an object (${absSpecPath})`,
+      ErrorCode.INVALID_INPUT,
+    );
+  }
+  const output = resolveOutputField(raw, specDir);
+  if (!output) {
+    throw new GeminiError(
+      `${fieldLabel}[${index}]: reference spec has no output (${absSpecPath})`,
+      ErrorCode.INVALID_INPUT,
+    );
+  }
+  assertExistingFile(output, `${fieldLabel}[${index}] output media`);
+  return output;
+}
+
+function resolveOneMediaRef(
+  item: Record<string, unknown>,
+  requestDir: string,
+  fieldLabel: string,
+  index: number,
+  options: {
+    requestKind: "image" | "video" | "music";
+    imageOnly?: boolean;
+  },
+): MediaRef {
+  const refPath = requireString(item, "path", `${fieldLabel}[].path`);
+  const resolved = resolveAgainst(requestDir, refPath.trim());
+
+  let mediaPath = resolved;
+  if (isSpecReferencePath(resolved)) {
+    mediaPath = loadSpecOutputMedia(resolved, fieldLabel, index);
+  } else {
+    assertExistingFile(resolved, "Reference file");
+  }
+
+  let type: MediaRefType;
+  if (typeof item.type === "string") {
+    if (!MEDIA_REF_TYPES.has(item.type as MediaRefType)) {
+      throw new GeminiError(
+        `${fieldLabel}[${index}].type must be image, video, or audio`,
+        ErrorCode.INVALID_INPUT,
+      );
+    }
+    type = item.type as MediaRefType;
+  } else if (options.imageOnly) {
+    type = "image";
+  } else {
+    type = inferMediaRefType(mediaPath);
+  }
+
+  if (options.imageOnly && type !== "image") {
+    throw new GeminiError(
+      `${options.requestKind} references support image only; got type ${type} at ${fieldLabel}[${index}] (${mediaPath})`,
+      ErrorCode.INVALID_INPUT,
+    );
+  }
+
+  assertExtensionMatchesType(mediaPath, type, fieldLabel, index);
+  return { path: mediaPath, type };
+}
+
+/**
+ * Resolve `params.references` to concrete media files.
+ * - Media path → that file (relative to `requestDir`)
+ * - `.yaml`/`.yml`/`.json` → that spec's `output` media (relative to **the
+ *   referenced spec's directory**)
+ */
 function resolveMediaRefs(
   rawRefs: unknown,
   requestDir: string,
@@ -134,56 +278,7 @@ function resolveMediaRefs(
         ErrorCode.INVALID_INPUT,
       );
     }
-    const refPath = requireString(item, "path", `${fieldLabel}[].path`);
-    const resolved = resolveAgainst(requestDir, refPath);
-
-    if (!fs.existsSync(resolved)) {
-      throw new GeminiError(
-        `Reference file not found: ${resolved}`,
-        ErrorCode.INVALID_INPUT,
-      );
-    }
-    let stat: fs.Stats;
-    try {
-      stat = fs.statSync(resolved);
-    } catch (error) {
-      throw new GeminiError(
-        `Cannot stat reference file: ${resolved}`,
-        ErrorCode.INVALID_INPUT,
-        error,
-      );
-    }
-    if (!stat.isFile()) {
-      throw new GeminiError(
-        `Reference path is not a file: ${resolved}`,
-        ErrorCode.INVALID_INPUT,
-      );
-    }
-
-    let type: MediaRefType;
-    if (typeof item.type === "string") {
-      if (!MEDIA_REF_TYPES.has(item.type as MediaRefType)) {
-        throw new GeminiError(
-          `${fieldLabel}[${i}].type must be image, video, or audio`,
-          ErrorCode.INVALID_INPUT,
-        );
-      }
-      type = item.type as MediaRefType;
-    } else if (options.imageOnly) {
-      type = "image";
-    } else {
-      type = inferMediaRefType(resolved);
-    }
-
-    if (options.imageOnly && type !== "image") {
-      throw new GeminiError(
-        `${options.requestKind} references support image only; got type ${type} at ${fieldLabel}[${i}] (${resolved})`,
-        ErrorCode.INVALID_INPUT,
-      );
-    }
-
-    assertExtensionMatchesType(resolved, type, fieldLabel, i);
-    refs.push({ path: resolved, type });
+    refs.push(resolveOneMediaRef(item, requestDir, fieldLabel, i, options));
   }
 
   return refs;
@@ -218,9 +313,8 @@ function parseImageRequest(
 
   if (typeof raw.model === "string") request.model = raw.model;
   if (typeof raw.background === "boolean") request.background = raw.background;
-  if (typeof raw.output === "string") {
-    request.output = resolveAgainst(requestDir, raw.output);
-  }
+  const output = resolveOutputField(raw, requestDir);
+  if (output) request.output = output;
 
   if (typeof paramsRaw.size === "string") {
     request.params.size = paramsRaw.size as ImageRequest["params"]["size"];
@@ -264,9 +358,8 @@ function parseVideoRequest(
 
   if (typeof raw.model === "string") request.model = raw.model;
   if (typeof raw.background === "boolean") request.background = raw.background;
-  if (typeof raw.output === "string") {
-    request.output = resolveAgainst(requestDir, raw.output);
-  }
+  const output = resolveOutputField(raw, requestDir);
+  if (output) request.output = output;
 
   if (typeof paramsRaw.durationSeconds === "number") {
     request.params.durationSeconds = paramsRaw.durationSeconds;
@@ -302,9 +395,8 @@ function parseSpeechRequest(
 
   if (typeof raw.model === "string") request.model = raw.model;
   if (typeof raw.background === "boolean") request.background = raw.background;
-  if (typeof raw.output === "string") {
-    request.output = resolveAgainst(requestDir, raw.output);
-  }
+  const output = resolveOutputField(raw, requestDir);
+  if (output) request.output = output;
 
   if (typeof paramsRaw.voice === "string") request.params.voice = paramsRaw.voice;
 
@@ -366,9 +458,8 @@ function parseMusicRequest(
 
   if (typeof raw.model === "string") request.model = raw.model;
   if (typeof raw.background === "boolean") request.background = raw.background;
-  if (typeof raw.output === "string") {
-    request.output = resolveAgainst(requestDir, raw.output);
-  }
+  const output = resolveOutputField(raw, requestDir);
+  if (output) request.output = output;
 
   if (typeof paramsRaw.lyrics === "string" && paramsRaw.lyrics.trim()) {
     request.params.lyrics = paramsRaw.lyrics;

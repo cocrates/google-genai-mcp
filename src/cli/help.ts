@@ -35,12 +35,15 @@ MCP equivalent: generate (single filePath per call).`,
     detail: `Usage:
   gemini analyze <files...> [-p|--prompt <text>] [-m|--model <name>] [--verbose]
 
-files: local paths and/or public http(s)/YouTube URLs (1–10, glob ok).
---prompt/-p: analysis instruction and desired output format.
-If -p is omitted, prompt is read from stdin (EOF). Empty prompt cancels
-(exit code 2). Default model: gemini-3.5-flash.
+files: media paths/URLs and/or one generation YAML/JSON (.yaml/.yml/.json)
+  (1–10, glob ok). A generation request is detected by extension: its output
+  is analyzed when no other media files are given, and the prompt includes
+  that YAML plus recursively referenced YAMLs.
+--prompt/-p: analysis instruction (optional with a generation YAML; prepended
+  to the checklist). For media-only inputs, -p or stdin is required; empty
+  cancels (exit code 2). Default model: gemini-3.6-flash.
 
-MCP equivalent: analyze({ inputs, prompt, model? }) → { interactionId, text }.
+MCP equivalent: analyze({ inputs, prompt?, model? }) → { interactionId, text }.
 Follow-up: interactive mode (/select then text) or MCP continue_interaction.`,
   },
   download: {

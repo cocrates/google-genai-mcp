@@ -32,7 +32,7 @@ Google Gemini API의 Image / Video / Speech(TTS) / Music **생성**과 image / a
 - **`help` ↔ MCP 정합:** CLI help 문구와 대응 MCP tool description의 의미·제약을 맞춘다
 - MCP: `generate` — **요청 파일 1개만** (`filePath`). 여러 건은 클라이언트가 다중/병렬 호출
 - MCP: `generate` 응답: **`interactionId` + `files`** (동기면 저장 경로 포함, 비동기는 `files: []`)
-- MCP: `analyze` — `inputs` + `prompt` (+ 선택 `model`) → `{ interactionId, text }`
+- MCP: `analyze` — `inputs` + `prompt?` (+ 선택 `model`) → `{ interactionId, text }` (`.yaml`/`.json`은 생성 스펙; 그때 `prompt` 생략 가능)
 - MCP: `download` / `get_interaction` / `continue_interaction` / `list_interactions` / `sync_interactions`
 - MCP: `cancel_interaction` / `delete_interaction`
 
@@ -110,7 +110,7 @@ Google Gemini API의 Image / Video / Speech(TTS) / Music **생성**과 image / a
 
 ### 파일 기반 입력 지원 (ASR-013)
 - **생성:** CLI `gemini generate <files…>` — YAML/JSON, 멀티 파일·glob. 인라인 생성 파라미터 미지원
-- **분석:** YAML 불필요. CLI `gemini analyze <files…>`; MCP `inputs`+`prompt` (아래 Analyze)
+- **분석:** CLI `gemini analyze <files…>`; MCP `inputs`+`prompt?`. `files`/`inputs`에 `.yaml`/`.yml`/`.json`이 있으면 생성 스펙으로 인식(아래 Analyze). `type: analyze` YAML은 없음
 - MCP: `generate` — **단일 요청 파일**, 응답 `{ interactionId, files, background }`. YAML `type` 자동 분기
 - MCP: `analyze` / `download` / `get_interaction` / `continue_interaction` / `list_interactions` / `sync_interactions` / `cancel_interaction` / `delete_interaction`
 - **상대 경로 기준 (YAML에 명시된 경로):** 요청 YAML/JSON 파일이 있는 디렉터리 (`dirname(requestFile)`)
@@ -121,8 +121,12 @@ Google Gemini API의 Image / Video / Speech(TTS) / Music **생성**과 image / a
 ### 참조 미디어 필드 명명·검증 (ASR-029)
 - image / video / music 정규 필드: **`params.references`만** 허용
 - **`params.images`는 제거** — 존재하면 파싱 즉시 `INVALID_INPUT` (`params.images is removed; use params.references`)
-- 항목: `{ path, type? }`. image·music은 image만 허용(`type` 생략 시 image). video는 `image` | `video` | `audio` (확장자 추론 또는 명시)
+- 항목: `{ path, type? }`. `path`는 **미디어 파일** 또는 **생성 요청 YAML/JSON** (`.yaml`/`.yml`/`.json`)
+  - YAML/JSON이면 해당 파일의 `output` 미디어를 참조로 사용한다. `output` 경로는 **그 YAML 파일의 디렉터리** 기준으로 해석
+  - 상대 `path`는 **그 항목을 적은 YAML 파일의 디렉터리** 기준 (중첩 시 각 파일이 자신의 디렉터리를 기준)
+- image·music은 최종 미디어가 image만 허용(`type` 생략 시 image). video는 `image` | `video` | `audio` (확장자 추론 또는 명시)
 - 빈 `references: []` 및 필드 생략: 허용(텍스트 전용과 동일)
+- 미존재·비파일·부적절 타입/확장자·YAML에 `output` 없음/output 미디어 없음 → 파싱 즉시 `INVALID_INPUT`
 - 파싱 단계 검증(API 호출 전): 경로 미존재 · 비파일(디렉터리 등) · 미지원/부적절 확장자·타입 → 즉시 `INVALID_INPUT` (MIME 폴백으로 진행하지 않음)
 - 한도: image 최대 19, video 최대 10, music 최대 10
 - speech: 참조 미디어 없음
@@ -251,30 +255,41 @@ Google Gemini API의 Image / Video / Speech(TTS) / Music **생성**과 image / a
 ### 미디어 이해 Analyze (ASR-023 … ASR-027)
 
 **표면 (ASR-024, ASR-027)**
-- MCP: `analyze({ inputs: string[], prompt: string, model?: string })` → `{ interactionId, text }`
+- MCP: `analyze({ inputs: string[], prompt?: string, model?: string })` → `{ interactionId, text }`
 - CLI: `gemini analyze <files…> [-p|--prompt …] [-m|--model …]`
-- YAML `type: analyze` 없음. 출력 형식·후처리는 **prompt에 명시**하고 서버측 `responseSchema`는 MVP 미포함
-- `inputs` / CLI files: 길이 1–10. 단일도 배열(MCP) / 복수 positional(CLI)
+- YAML `type: analyze` 없음. 서버측 `responseSchema`는 MVP 미포함
+- `inputs` / CLI files: 길이 1–10. 항목은 미디어 경로·URL이거나 **생성 요청 YAML/JSON** (확장자 `.yaml`/`.yml`/`.json`으로 구분, 최대 1개)
+- **모드**
+  1. **직접 미디어:** 미디어만 + 비어 있지 않은 `prompt`
+  2. **생성 스펙 기반:** inputs에 생성 YAML/JSON 1개. 나머지 미디어가 없으면 YAML `output`을 분석(파일 존재 필수). `prompt` 생략 가능
+- 생성 스펙이 있으면 서버가 합성 프롬프트를 구성한다:
+  1. 사용자 `prompt`(있으면)
+  2. 일반 분석 체크리스트 — (a) YAML 대비 생성 충실도·차이점, (b) 명세 외 포함 내용, (c) 시각적 결함(해부학·공간/건축 연결성·물리/개체 결합 등) 및 종합 완성도(`OVERALL` PASS/FAIL)
+  3. 요청 YAML 본문
+  4. 참조 YAML 본문(재귀) — `params.references[].path`가 `.yaml`/`.yml`/`.json`인 항목만 포함(각 파일 디렉터리 기준 상대 경로). 미디어(`.png` 등) 참조는 프롬프트에 넣지 않음
 
 **기본 모델 (ASR-026)**
-- 기본: `gemini-3.5-flash`. `model` 인자로 오버라이드
+- 기본: `gemini-3.6-flash`. `model` 인자로 오버라이드
 - `media_resolution` MVP 미노출
 
 **입력·업로드 (ASR-025)**
 - `inputs` 항목 해석 순서:
-  1. YouTube (`youtube.com` / `youtu.be`) → Interactions `type: video`, `uri` 패스스루
-  2. 기타 `http(s)://` → `uri` 패스스루; 타입은 URL path 확장자로 추론, 실패 시 입력 오류
-  3. 그 외 → 로컬 경로(존재·가독성 검사). CLI 상대 경로는 CWD 기준
-- 로컬 파일: **파일당 ≤20MB** → 인라인 base64; **초과** → Files API 업로드 후 `ACTIVE`까지 폴링(간격 5초) → `uri` 사용
+  1. 로컬 `.yaml`/`.yml`/`.json` → 생성 요청 스펙(위 모드 2). URL은 스펙으로 취급하지 않음
+  2. YouTube (`youtube.com` / `youtu.be`) → Interactions `type: video`, `uri` 패스스루
+  3. 기타 `http(s)://` → `uri` 패스스루; 타입은 URL path 확장자로 추론, 실패 시 입력 오류
+  4. 그 외 → 로컬 미디어 경로(존재·가독성 검사). CLI 상대 경로는 CWD 기준; 스펙 `output`은 요청 파일 디렉터리 기준
+- 로컬 미디어: **파일당 ≤20MB** → 인라인 base64; **초과** → Files API 업로드 후 `ACTIVE`까지 폴링(간격 5초) → `uri` 사용
 - MIME/타입: 기존 `inferMediaRefType` 및 확장자→MIME 맵 재사용. 추론 실패 시 즉시 입력 오류
 - GCS 등록·비공개 URL 대행 없음
 
 **prompt (CLI)**
-- `-p`/`--prompt`가 있으면 사용. 없으면 stdin을 EOF까지 읽음
-- trim 후 빈 문자열이면 **취소**(exit code 입력 오류). 대화형 한 줄 프롬프트 없음
+- `-p`/`--prompt`가 있으면 사용. 생성 YAML이 없고 `-p`도 없으면 stdin을 EOF까지 읽음
+- 생성 YAML 없이 trim 후 빈 문자열이면 **취소**(exit code 입력 오류). 생성 YAML이 있으면 빈 prompt 허용(기본 체크리스트만 사용)
+- 대화형 한 줄 프롬프트 없음
 
 **Interaction**
 - 응답에 `interactionId` 포함. `continue_interaction` / 인터랙티브 이어가기 가능
+- 생성 YAML 모드에서는 로컬 store에 해당 YAML 경로를 `requestFile`로 기록
 - 로컬 store에 매핑 등록 (`requestFile` 없을 수 있음)
 ---
 
@@ -365,7 +380,8 @@ Google Gemini API의 Image / Video / Speech(TTS) / Music **생성**과 image / a
 ### 경로 해석
 
 - 요청 파일 내 상대 경로(`params.references[].path`, `output`)는 **해당 요청 파일의 디렉터리**를 기준으로 해석한다
-- 예: `/proj/reqs/gen.yaml`의 `references[].path: "./refs/a.jpg"` → `/proj/reqs/refs/a.jpg`
+- 예: `/proj/reqs/gen.yaml`의 `references[].path: "./refs/a.yaml"` → `/proj/reqs/refs/a.yaml`; 그 YAML의 `output: "./a.png"` → `/proj/reqs/refs/a.png`
+- 중첩: `a.yaml`이 `../char/b.yaml`을 참조하고 `b.yaml`이 `./c.yaml`을 참조하면, `c.yaml`은 `b.yaml`과 같은 폴더에 있다
 - `download`의 상대 `filePath`도 동일하게, 해당 interaction의 `requestFile` 디렉터리 기준 (없으면 CLI=CWD / MCP=workspace)
 - **`output` 미지정 시 자동 파일명** 저장 위치: CLI = **CWD**, MCP = **workspace** (`process.cwd()`)
 - 절대 경로는 그대로 사용
@@ -407,8 +423,8 @@ params:
     Take the blue floral dress from the first image
     and let the woman from the second image wear it.
   references:
-    - path: "./references/dress.jpg"
-    - path: "./references/woman.png"
+    - path: "./references/dress.yaml"   # → that YAML's output media
+    - path: "./references/woman.yaml"
   size: 1K
   aspectRatio: "16:9"
   seed: null
@@ -423,8 +439,8 @@ output: "./output/result.png"
 | `type` | ✅ | `"image"` | — | `"image"` |
 | `model` | ❌ | string | `"gemini-3.1-flash-image"` | `gemini-3.1-flash-image`, `gemini-3-pro-image` |
 | `params.prompt` | ✅ | multi-line string | — | 최대 4096자 |
-| `params.references` | ❌ | array | `[]` | 최대 19개 (Nano Banana 2: 14객체+5캐릭터). **image만** |
-| `params.references[].path` | ✅ | string | — | 이미지 파일 경로 (요청 파일 디렉터리 기준) |
+| `params.references` | ❌ | array | `[]` | 최대 19개 (Nano Banana 2: 14객체+5캐릭터). **최종 미디어는 image만** |
+| `params.references[].path` | ✅ | string | — | 이미지 파일 **또는** 생성 YAML/JSON (요청 파일 디렉터리 기준). YAML이면 그 파일 `output` 사용 |
 | `params.references[].type` | ❌ | enum | `image` | `image`만 허용. 생략 시 image |
 | `params.size` | ❌ | enum | `"1K"` | `"0.5K"`, `"1K"`, `"2K"`, `"4K"` |
 | `params.aspectRatio` | ❌ | string | `"16:9"` | `"1:1"`, `"3:4"`, `"4:3"`, `"9:16"`, `"16:9"`, `"21:9"` 등 |
@@ -469,7 +485,8 @@ output: "./output/result.mp4"
 | `model` | ❌ | string | `"gemini-omni-flash-preview"` | Omni Flash (`gemini-omni-flash-preview`) |
 | `params.prompt` | ✅ | multi-line string | — | 장면·카메라·조명 등 상세 기술 |
 | `params.references` | ❌ | array | `[]` | 멀티모달 참조 (최대 10). `image` / `video` / `audio` |
-| `params.references[].path` | ✅ | string | — | 미디어 파일 경로 (요청 파일 디렉터리 기준) |
+| `params.references[].path` | ✅ | string | — | 미디어 파일 **또는** 생성 YAML/JSON (요청 파일 디렉터리 기준). YAML이면 그 파일 `output` 사용 |
+
 | `params.references[].type` | ❌ | enum | 확장자로 추론 | `image`, `video`, `audio` |
 | `params.durationSeconds` | ❌ | number | 모델 기본 | `response_format.duration`로 `"Ns"` 전달 |
 | `params.resolution` | ❌ | string | — | 파싱만 함 (Omni video_config에 resolution 필드 없음) |
@@ -651,7 +668,8 @@ output: "./output/ambient.mp3"
 | `params.prompt` | ✅ | multi-line string | — | 장르·분위기·악기·길이·구조. 타임스탬프/`[Verse]` 등 프롬프트 내 기술 가능 |
 | `params.lyrics` | ❌ | multi-line string | — | 커스텀 가사. 있으면 API `input` 텍스트에 prompt와 합성해 전달 |
 | `params.references` | ❌ | array | `[]` | 영감 이미지 최대 **10**. **image만** |
-| `params.references[].path` | ✅ | string | — | 요청 파일 디렉터리 기준 |
+| `params.references[].path` | ✅ | string | — | 이미지 파일 **또는** 생성 YAML/JSON (요청 파일 디렉터리 기준). YAML이면 그 파일 `output` 사용 |
+
 | `params.references[].type` | ❌ | enum | `image` | `image`만 허용. 생략 시 image |
 | `params.outputFormat` | ❌ | enum | `"mp3"` | 로컬 저장 힌트. API에는 `response_format: { type: "audio" }`만 전송 (기본 MP3). Pro WAV는 응답 mime에 따름 |
 | `params.lyricsOutput` | ❌ | string | — | 응답 `output_text`(생성 가사/구조) 저장 경로. 미지정 시 저장 안 함 |
@@ -694,10 +712,11 @@ Use the following lyrics and section tags:
   - 선택 파라미터 `background`: YAML에 `background`가 없을 때만 타입 기본값을 덮어씀
   - 출력 파일 존재 시 **overwrite**
 - `analyze` tool: 미디어 이해(분석)
-  - 입력: `inputs` (string[], 길이 1–10, 필수), `prompt` (string, 필수, 비어 있으면 입력 오류), `model` (string, 선택, 기본 `gemini-3.5-flash`)
-  - `inputs` 항목: 로컬 경로 / 공개 http(s) URL / YouTube URL (업로드·해석 규칙은 Decisions «미디어 이해 Analyze»)
+  - 입력: `inputs` (string[], 길이 1–10, 필수 — 미디어 및/또는 생성 YAML/JSON 1개), `prompt` (string, 생성 YAML 없으면 필수·비어 있으면 입력 오류), `model` (string, 선택, 기본 `gemini-3.6-flash`)
+  - 생성 YAML/JSON(확장자)이 `inputs`에 있으면: 다른 미디어가 없을 때 YAML `output` 분석; 합성 프롬프트에 사용자 prompt(선택) + 기본 체크리스트 + 요청/참조 YAML(재귀) 포함
+  - `inputs` 미디어 항목: 로컬 경로 / 공개 http(s) URL / YouTube URL (업로드·해석 규칙은 Decisions «미디어 이해 Analyze»)
   - **응답:** `{ interactionId, text }`
-  - 로컬 interactions store에 매핑 등록
+  - 로컬 interactions store에 매핑 등록 (생성 YAML이면 경로를 `requestFile`로 기록)
 - `download` tool: 완료된 interaction 산출물을 로컬에 저장
   - 입력: `interactionId` (필수), `filePath` (선택)
   - `filePath` 미지정 시: YAML `output` → 없으면 자동 파일명 (저장 위치: workspace)
@@ -774,7 +793,7 @@ Use the following lyrics and section tags:
 - **Global flags (공통):** `--verbose` (로그), `--force` (덮어쓰기 확인 생략) — 모든 커맨드에 적용
 - **명령:**
   - `generate <files…>` — YAML/JSON 생성 (멀티·glob). bare `gemini <files>` **불가**
-  - `analyze <files…> [-p|--prompt …] [-m|--model …]` — 미디어 분석. files→`inputs`. `-p` 없으면 stdin; trim 후 빈 prompt면 **취소**(exit 2)
+  - `analyze <files…> [-p|--prompt …] [-m|--model …]` — 미디어 분석. files→`inputs`(미디어 및/또는 생성 YAML/JSON). 생성 YAML이면 `output` 분석·스펙 체크리스트. `-p` 없고 생성 YAML도 없으면 stdin; trim 후 빈 prompt이고 생성 YAML 없으면 **취소**(exit 2)
   - `download <interactionId> [outputPath]`
   - `list`
   - `show <interactionId>`
@@ -820,7 +839,7 @@ Use the following lyrics and section tags:
 - YAML/JSON 파일 파싱 및 검증
 - 필수 필드 누락 시 명확한 오류 메시지
 - 상대 경로는 **요청 파일 디렉터리** 기준으로 해석
-- `references[].path`로 지정된 파일: 존재·일반 파일 여부·허용 확장자/타입 검증 (미통과 시 즉시 실패)
+- `references[].path`: 미디어 파일 또는 생성 YAML/JSON. YAML이면 해당 파일 디렉터리 기준 `output` 미디어로 해석. 존재·일반 파일·허용 확장자/타입 검증 (미통과 시 즉시 실패)
 - `params.images` 존재 시 즉시 실패 (`use params.references`)
 - 모델별 참조 수 제한 검증 (Image: 19개, Video/Music references: 10개)
 

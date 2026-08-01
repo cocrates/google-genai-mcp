@@ -37,7 +37,7 @@ Google Gemini API의 **Image / Video / Speech(TTS) / Music 생성**과 **미디�
 | Tool | 설명 |
 |------|------|
 | `generate` | YAML/JSON **파일 1개**로 생성 → `{ interactionId, files, background }` |
-| `analyze` | 미디어 이해 → `{ interactionId, text }` (`inputs`+`prompt`, 선택 `model`) |
+| `analyze` | 미디어 이해 → `{ interactionId, text }` (`inputs`+`prompt?`+`model?`; `.yaml`/`.json`은 생성 스펙으로 인식) |
 | `download` | 완료된 interaction 산출물 저장 (미완료 시 즉시 에러) |
 | `get_interaction` | 상태 조회 (서버에 없으면 로컬 매핑 정리) |
 | `continue_interaction` | `previous_interaction_id`로 이어가기 (생성·분석 공통) |
@@ -79,6 +79,9 @@ gemini generate a.yaml b.yaml --verbose --force
 # 분석 (prompt: -p 또는 stdin; 빈 prompt면 취소)
 gemini analyze ./out/clip.mp4 -p "의도대로 나왔는지 평가해 줘"
 echo "3문장으로 요약" | gemini analyze ./photo.png
+# 생성 YAML 기준 분석 (확장자로 인식 → output + YAML/참조 YAML 체크리스트)
+gemini analyze ./images/page04.yaml
+gemini analyze ./images/page04.yaml -p "인물 일관성을 더 자세히"
 
 # 관리 (대상은 interactionId)
 gemini list
@@ -95,7 +98,7 @@ gemini
 | 명령 | 설명 |
 |------|------|
 | `generate <files…>` | YAML/JSON 생성 |
-| `analyze <files…>` | 미디어 분석 → text + interactionId |
+| `analyze <files…>` | 미디어 분석 → text + interactionId (`.yaml`/`.json`은 생성 스펙) |
 | `download` / `list` / `show` / `status` / `sync` / `cancel` / `delete` | interaction 관리 |
 | `help [command]` | 도움말 (MCP tool 설명과 정합) |
 

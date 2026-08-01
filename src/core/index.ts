@@ -23,6 +23,7 @@ export {
 export * from "./media.js";
 export * from "./files-api.js";
 export * from "./analyze.js";
+export * from "./analyze-spec.js";
 export * from "./generate.js";
 export * from "./image.js";
 export * from "./video.js";

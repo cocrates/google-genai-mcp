@@ -17,7 +17,10 @@ export interface MediaRef {
 
 export interface ImageParams {
   prompt: string;
-  /** Reference images (type must be image). */
+  /**
+   * Reference images. Each entry is a media path or a generation YAML/JSON
+   * whose `output` media is used (path relative to that YAML's directory).
+   */
   references?: MediaRef[];
   size?: "0.5K" | "1K" | "2K" | "4K";
   aspectRatio?: string;
@@ -26,7 +29,10 @@ export interface ImageParams {
 
 export interface VideoParams {
   prompt: string;
-  /** Multimodal references (image, video, audio). */
+  /**
+   * Multimodal references (image, video, audio), or generation YAML/JSON
+   * whose `output` is used.
+   */
   references?: MediaRef[];
   /** Output duration in seconds (sent as response_format.duration, e.g. "8s"). */
   durationSeconds?: number;
@@ -55,7 +61,9 @@ export interface MusicParams {
   prompt: string;
   /** Optional lyrics merged into the API text input with the prompt. */
   lyrics?: string;
-  /** Inspiration images (type must be image). */
+  /**
+   * Inspiration images, or generation YAML/JSON whose `output` image is used.
+   */
   references?: MediaRef[];
   outputFormat?: "mp3" | "wav";
   /** If set, save model-generated lyrics/structure text to this path. */

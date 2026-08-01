@@ -21,15 +21,31 @@ import {
   type Logger,
   type MediaRefType,
 } from "./types.js";
+import {
+  buildSpecAnalyzePrompt,
+  loadSpecAnalyzeContext,
+  partitionAnalyzeInputs,
+  resolveInputsFromSpec,
+} from "./analyze-spec.js";
 
-export const DEFAULT_ANALYZE_MODEL = "gemini-3.5-flash";
+export const DEFAULT_ANALYZE_MODEL = "gemini-3.6-flash";
 export const MAX_ANALYZE_INPUTS = 10;
 /** Per-file inline threshold (20MB). */
 export const INLINE_MAX_BYTES = 20 * 1024 * 1024;
 
 export interface AnalyzeOptions {
+  /**
+   * Media paths/URLs and/or one generation YAML/JSON (`.yaml`/`.yml`/`.json`).
+   * A request file is detected by extension; its `output` is analyzed when no
+   * other media entries are present, and the prompt includes the YAML tree.
+   */
   inputs: string[];
-  prompt: string;
+  /**
+   * Analysis instruction. Optional when a generation YAML/JSON is among
+   * `inputs` — a default fidelity/defect checklist is used; user text is
+   * prepended when present.
+   */
+  prompt?: string;
   model?: string;
   /** Base for resolving relative local paths (default: process.cwd()). */
   baseDir?: string;
@@ -176,23 +192,47 @@ function extractOutputText(interaction: Record<string, unknown>): string {
 export async function analyzeMedia(
   options: AnalyzeOptions,
 ): Promise<AnalyzeResult> {
-  const prompt = options.prompt.trim();
-  if (!prompt) {
-    throw new GeminiError(
-      "analyze prompt is empty; provide --prompt/-p or non-empty stdin",
-      ErrorCode.INVALID_INPUT,
-    );
-  }
-
   if (!Array.isArray(options.inputs) || options.inputs.length === 0) {
     throw new GeminiError(
-      "analyze requires at least one input",
+      "analyze requires at least one input (media path/URL and/or generation YAML/JSON)",
       ErrorCode.INVALID_INPUT,
     );
   }
   if (options.inputs.length > MAX_ANALYZE_INPUTS) {
     throw new GeminiError(
       `analyze supports at most ${MAX_ANALYZE_INPUTS} inputs`,
+      ErrorCode.INVALID_INPUT,
+    );
+  }
+
+  const { requestFile, mediaInputs } = partitionAnalyzeInputs(options.inputs);
+  let inputs = mediaInputs;
+  let prompt = options.prompt?.trim() ?? "";
+  let absRequestFile: string | null = null;
+
+  if (requestFile) {
+    const context = loadSpecAnalyzeContext(requestFile);
+    absRequestFile = context.absRequestFile;
+    inputs = resolveInputsFromSpec(mediaInputs, context);
+    prompt = buildSpecAnalyzePrompt(prompt, context);
+  }
+
+  if (!prompt) {
+    throw new GeminiError(
+      "analyze prompt is empty; provide --prompt/-p, non-empty stdin, or a generation YAML/JSON among inputs",
+      ErrorCode.INVALID_INPUT,
+    );
+  }
+
+  if (inputs.length === 0) {
+    throw new GeminiError(
+      "analyze requires at least one media input (or a generation YAML with output)",
+      ErrorCode.INVALID_INPUT,
+    );
+  }
+  if (inputs.length > MAX_ANALYZE_INPUTS) {
+    throw new GeminiError(
+      `analyze supports at most ${MAX_ANALYZE_INPUTS} media inputs`,
       ErrorCode.INVALID_INPUT,
     );
   }
@@ -205,7 +245,7 @@ export async function analyzeMedia(
   getGeminiClient(logger);
 
   const mediaParts: ResolvedAnalyzePart[] = [];
-  for (const input of options.inputs) {
+  for (const input of inputs) {
     mediaParts.push(
       await resolveAnalyzeInput(input, baseDir, logger, options.onProgress),
     );
@@ -248,7 +288,7 @@ export async function analyzeMedia(
   }
 
   const text = extractOutputText(interaction);
-  addInteraction(id, null, null, getDataDir(), null, prompt);
+  addInteraction(id, absRequestFile, null, getDataDir(), null, prompt);
 
   return { interactionId: id, text };
 }

@@ -55,8 +55,8 @@ Google Gemini API의 Image/Video/Speech/Music **생성**과 image/audio/video **
 |------|------|
 | CLI 형태 | `gemini <command> <parameters>`; 명령 없으면 인터랙티브 |
 | 생성 입력 | YAML/JSON. CLI `generate`는 멀티·glob, MCP `generate`는 **파일 1개** |
-| 분석 입력 | MCP: `inputs[]`+`prompt`(+`model?`). CLI: `analyze <files…>` + `-p` 또는 stdin |
-| 분석 응답 | `{ interactionId, text }`; 빈 prompt면 취소 |
+| 분석 입력 | MCP/CLI: `inputs`/`files`에 미디어 경로·URL 및/또는 생성 YAML/JSON(`.yaml`/`.yml`/`.json`, 확장자로 인식) + 선택 `prompt`/`-p` |
+| 분석 응답 | `{ interactionId, text }`; 미디어만이면 빈 prompt 취소. 생성 YAML이 있으면 스펙·참조 YAML 포함 체크리스트 |
 | 경로 | YAML 내 상대 경로 = 요청 파일 디렉터리 기준. 자동 파일명: CLI=CWD, MCP=workspace |
 | 생성 응답 | `generate` → `{ interactionId, files, background }` (비동기 시 `files: []`) |
 | download | 미완료·실패 등 **즉시 에러** |
